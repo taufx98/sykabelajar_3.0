@@ -13,8 +13,7 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@/data/demo": ["src/data/live.ts"]
+      "@/*": ["src/*"]
     },
     "strict": true,
     "noUnusedLocals": false,
