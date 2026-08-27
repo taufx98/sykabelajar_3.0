@@ -30,7 +30,7 @@
   <script type='text/javascript'>
     //<![CDATA[
     window.SYKA_BLOGGER_CONFIG={
-      appBase:'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar_3.0@55ac1bdf385be79aec12eca524af11fd8369960e',
+      appBase:'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar_3.0@e7216c81284fd9bb1729799f6fee9c0e6ed08fd3',
       supabaseUrl:'https://jrfogwueytiddnanetth.supabase.co',
       cloudinaryCloudName:'sykabelajar',
       cloudinaryUploadPreset:'sykabelajar_preset'
@@ -40,8 +40,8 @@
       function css(url){return new Promise(function(ok,no){var l=document.createElement('link');l.rel='stylesheet';l.href=url;l.onload=ok;l.onerror=no;document.head.appendChild(l);});}
       function js(url){return new Promise(function(ok,no){var s=document.createElement('script');s.type='module';s.src=url;s.onload=ok;s.onerror=no;document.body.appendChild(s);});}
       Promise.all([
-        css(window.SYKA_BLOGGER_CONFIG.appBase+'/styles.min.css?v=13'),
-        js(window.SYKA_BLOGGER_CONFIG.appBase+'/app.js?v=13')
+        css(window.SYKA_BLOGGER_CONFIG.appBase+'/styles.min.css?v=14'),
+        js(window.SYKA_BLOGGER_CONFIG.appBase+'/app.js?v=14')
       ]).catch(function(e){console.error('[SykaBelajar] bundle load failed',e);root.innerHTML='<div class="blogger-noscript"><strong>SykaBelajar sedang memuat ulang.</strong><br/>Bundle aplikasi belum berhasil dimuat. Periksa deployment gh-pages dan refresh halaman.</div>';});
     })();
     //]]>
