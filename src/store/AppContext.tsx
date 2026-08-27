@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { signIn, signUp, signOut } from '@/services/auth.service';
 import { getProfileById, updateProfile as updateProfileRecord } from '@/services/profile.service';
 import { hydrateRuntime, mapProfileToUser, resetRuntimeCollections } from '@/services/runtime.service';
-import { demoAwards, demoCertificates, demoFeed, demoNotifications, demoOrders, demoLeaderboard } from '@/data/live';
+import { liveAwards, liveCertificates, liveFeed, liveNotifications, liveOrders, liveLeaderboard } from '@/data/live';
 import { backendRoleToUiRole, getUserRoles, hasAllowedLoginRole, uiRoleToAccountType } from '@/services/role.service';
 
 interface AppState {
@@ -42,11 +42,11 @@ function publishRuntimeState(setters: {
   setOrders: (v: Order[]) => void;
   setFeed: (v: FeedPost[]) => void;
 }) {
-  setters.setNotifications([...demoNotifications]);
-  setters.setAwards([...demoAwards]);
-  setters.setCertificates([...demoCertificates]);
-  setters.setOrders([...demoOrders]);
-  setters.setFeed([...demoFeed]);
+  setters.setNotifications([...liveNotifications]);
+  setters.setAwards([...liveAwards]);
+  setters.setCertificates([...liveCertificates]);
+  setters.setOrders([...liveOrders]);
+  setters.setFeed([...liveFeed]);
 }
 
 function preferredRole(roles: Awaited<ReturnType<typeof getUserRoles>>): Role {
@@ -79,13 +79,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const profile = await getProfileById(userId);
         if (profile) {
           const mapped = mapProfileToUser(profile, email);
-          const leaderboardEntry = demoLeaderboard.find((entry) => entry.userId === userId);
+          const leaderboardEntry = liveLeaderboard.find((entry) => entry.userId === userId);
           let role = mapped.role;
-          try {
-            role = preferredRole(await getUserRoles(userId));
-          } catch (roleError) {
-            console.warn('[SykaBelajar] role lookup failed', roleError);
-          }
+          try { role = preferredRole(await getUserRoles(userId)); } catch (roleError) { console.warn('[SykaBelajar] role lookup failed', roleError); }
           setUser({ ...mapped, role, points: leaderboardEntry?.points ?? mapped.points, rank: leaderboardEntry?.rank ?? mapped.rank });
         }
       }
@@ -103,50 +99,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!alive || error) return;
         if (data.session?.user) {
           const sessionUser = { id: data.session.user.id, email: data.session.user.email ?? undefined };
-          setAuthUser(sessionUser);
-          setIsGuest(false);
-          localStorage.removeItem(GUEST_KEY);
-          void refreshRuntime(sessionUser.id, sessionUser.email);
+          setAuthUser(sessionUser); setIsGuest(false); localStorage.removeItem(GUEST_KEY); void refreshRuntime(sessionUser.id, sessionUser.email);
         } else {
-          resetRuntimeCollections();
-          publish();
-          void refreshRuntime();
+          resetRuntimeCollections(); publish(); void refreshRuntime();
         }
-      } catch (error) {
-        console.error('[SykaBelajar] auth bootstrap failed', error);
-      }
+      } catch (error) { console.error('[SykaBelajar] auth bootstrap failed', error); }
     };
-
     void bootstrap();
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!alive) return;
       if (session?.user) {
         const sessionUser = { id: session.user.id, email: session.user.email ?? undefined };
-        setAuthUser(sessionUser);
-        setIsGuest(false);
-        localStorage.removeItem(GUEST_KEY);
-        void refreshRuntime(sessionUser.id, sessionUser.email);
+        setAuthUser(sessionUser); setIsGuest(false); localStorage.removeItem(GUEST_KEY); void refreshRuntime(sessionUser.id, sessionUser.email);
       } else {
-        setAuthUser(null);
-        setUser(null);
-        if (!isGuest) {
-          resetRuntimeCollections();
-          publish();
-          void refreshRuntime();
-        }
+        setAuthUser(null); setUser(null);
+        if (!isGuest) { resetRuntimeCollections(); publish(); void refreshRuntime(); }
       }
     });
-
-    return () => {
-      alive = false;
-      subscription.subscription.unsubscribe();
-    };
+    return () => { alive = false; subscription.subscription.unsubscribe(); };
   }, [isGuest, publish, refreshRuntime]);
 
   const toast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    const id = crypto.randomUUID();
-    setToasts((items) => [...items, { id, message, type }]);
-    window.setTimeout(() => setToasts((items) => items.filter((x) => x.id !== id)), 3500);
+    const id = crypto.randomUUID(); setToasts((items) => [...items, { id, message, type }]); window.setTimeout(() => setToasts((items) => items.filter((x) => x.id !== id)), 3500);
   }, []);
 
   const login = useCallback(async (email: string, password: string, requestedRole: Exclude<Role, 'admin'> = 'pelajar') => {
@@ -154,65 +128,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const result = await signIn(email.trim(), password);
       if (!result.user) return { ok: false, error: 'Login gagal: sesi pengguna tidak tersedia.' };
       const roles = await getUserRoles(result.user.id);
-      if (!roles.length) {
-        await signOut();
-        return { ok: false, error: 'Akun belum memiliki role aktif di backend.' };
-      }
-      if (!hasAllowedLoginRole(roles, requestedRole)) {
-        await signOut();
-        const roleNames = roles.map((role) => backendRoleToUiRole(role)).join(', ');
-        return { ok: false, error: `Role akun adalah ${roleNames}. Pilih jenis akun yang sesuai.` };
-      }
-      setAuthUser({ id: result.user.id, email: result.user.email ?? undefined });
-      setIsGuest(false);
-      localStorage.removeItem(GUEST_KEY);
-      void refreshRuntime(result.user.id, result.user.email ?? undefined);
-      return { ok: true };
-    } catch (error: any) {
-      return { ok: false, error: error?.message ?? 'Email atau password tidak valid.' };
-    }
+      if (!roles.length) { await signOut(); return { ok: false, error: 'Akun belum memiliki role aktif di backend.' }; }
+      if (!hasAllowedLoginRole(roles, requestedRole)) { await signOut(); const roleNames = roles.map((role) => backendRoleToUiRole(role)).join(', '); return { ok: false, error: `Role akun adalah ${roleNames}. Pilih jenis akun yang sesuai.` }; }
+      setAuthUser({ id: result.user.id, email: result.user.email ?? undefined }); setIsGuest(false); localStorage.removeItem(GUEST_KEY); void refreshRuntime(result.user.id, result.user.email ?? undefined); return { ok: true };
+    } catch (error: any) { return { ok: false, error: error?.message ?? 'Email atau password tidak valid.' }; }
   }, [refreshRuntime]);
 
   const register = useCallback(async (data: Partial<User> & { email: string; password: string }) => {
     try {
       const requestedRole = data.role === 'guru' || data.role === 'penyelenggara' ? data.role : 'pelajar';
-      await signUp(data.email.trim(), data.password, {
-        username: data.username ?? '',
-        full_name: data.displayName ?? '',
-        account_type: uiRoleToAccountType(requestedRole),
-        birth_date: data.birthDate,
-        institution: data.school,
-        grade: data.educationLevel,
-      });
+      await signUp(data.email.trim(), data.password, { username: data.username ?? '', full_name: data.displayName ?? '', account_type: uiRoleToAccountType(requestedRole), birth_date: data.birthDate, institution: data.school, grade: data.educationLevel });
       return { ok: true };
-    } catch (error: any) {
-      return { ok: false, error: error?.message ?? 'Pendaftaran gagal.' };
-    }
+    } catch (error: any) { return { ok: false, error: error?.message ?? 'Pendaftaran gagal.' }; }
   }, []);
 
-  const loginAsGuest = useCallback(() => {
-    localStorage.setItem(GUEST_KEY, '1');
-    setIsGuest(true);
-    setAuthUser(null);
-    setUser(null);
-    resetRuntimeCollections();
-    publish();
-    void refreshRuntime();
-  }, [publish, refreshRuntime]);
-
-  const logout = useCallback(async () => {
-    try {
-      await signOut();
-    } finally {
-      localStorage.removeItem(GUEST_KEY);
-      setAuthUser(null);
-      setUser(null);
-      setIsGuest(false);
-      resetRuntimeCollections();
-      publish();
-      void refreshRuntime();
-    }
-  }, [publish, refreshRuntime]);
+  const loginAsGuest = useCallback(() => { localStorage.setItem(GUEST_KEY, '1'); setIsGuest(true); setAuthUser(null); setUser(null); resetRuntimeCollections(); publish(); void refreshRuntime(); }, [publish, refreshRuntime]);
+  const logout = useCallback(async () => { try { await signOut(); } finally { localStorage.removeItem(GUEST_KEY); setAuthUser(null); setUser(null); setIsGuest(false); resetRuntimeCollections(); publish(); void refreshRuntime(); } }, [publish, refreshRuntime]);
 
   const updateProfile = useCallback(async (data: Partial<User>) => {
     if (!authUser) return;
@@ -224,89 +155,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.birthDate !== undefined) patch.birth_date = data.birthDate;
     if (data.profilePhoto !== undefined) patch.avatar_url = data.profilePhoto;
     if (data.educationLevel !== undefined) patch.grade = data.educationLevel;
-    const fresh = await updateProfileRecord(authUser.id, patch);
-    const mapped = mapProfileToUser(fresh, authUser.email);
-    let role = mapped.role;
-    try { role = preferredRole(await getUserRoles(authUser.id)); } catch { /* keep profile-derived role */ }
+    const fresh = await updateProfileRecord(authUser.id, patch); const mapped = mapProfileToUser(fresh, authUser.email); let role = mapped.role; try { role = preferredRole(await getUserRoles(authUser.id)); } catch { }
     setUser((current) => current ? { ...current, ...mapped, role } : { ...mapped, role });
   }, [authUser]);
 
-  const markNotificationRead = useCallback(async (id: string) => {
-    if (!authUser) return;
-    const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', id).eq('user_id', authUser.id);
-    if (error) throw error;
-    setNotifications((items) => items.map((n) => n.id === id ? { ...n, read: true } : n));
-  }, [authUser]);
+  const markNotificationRead = useCallback(async (id: string) => { if (!authUser) return; const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', id).eq('user_id', authUser.id); if (error) throw error; setNotifications((items) => items.map((n) => n.id === id ? { ...n, read: true } : n)); }, [authUser]);
+  const markAllNotificationsRead = useCallback(async () => { if (!authUser) return; const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('user_id', authUser.id).is('read_at', null); if (error) throw error; setNotifications((items) => items.map((n) => ({ ...n, read: true }))); }, [authUser]);
+  const addPoints = useCallback(async (_points: number) => { throw new Error('XP hanya boleh diberikan oleh backend/server-authoritative workflows.'); }, []);
 
-  const markAllNotificationsRead = useCallback(async () => {
-    if (!authUser) return;
-    const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('user_id', authUser.id).is('read_at', null);
-    if (error) throw error;
-    setNotifications((items) => items.map((n) => ({ ...n, read: true })));
-  }, [authUser]);
-
-  const addPoints = useCallback(async (_points: number) => {
-    throw new Error('XP hanya boleh diberikan oleh backend/server-authoritative workflows.');
-  }, []);
-
-  const addNotification = useCallback(async (n: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => {
-    if (!authUser) return;
-    const { data, error } = await supabase.from('notifications').insert({ user_id: authUser.id, type: n.type, title: n.title, body: n.body, data: { link: n.link, icon: n.icon } }).select('*').single();
-    if (error) throw error;
-    setNotifications((items) => [{ id: data.id, type: data.type, title: data.title, body: data.body ?? '', createdAt: data.created_at, read: false, link: data.data?.link }, ...items]);
-  }, [authUser]);
-
+  const addNotification = useCallback(async (n: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => { if (!authUser) return; const { data, error } = await supabase.from('notifications').insert({ user_id: authUser.id, type: n.type, title: n.title, body: n.body, data: { link: n.link, icon: n.icon } }).select('*').single(); if (error) throw error; setNotifications((items) => [{ id: data.id, type: data.type, title: data.title, body: data.body ?? '', createdAt: data.created_at, read: false, link: data.data?.link }, ...items]); }, [authUser]);
   const addOrder = useCallback((order: Order) => setOrders((items) => [order, ...items]), []);
-
-  const togglePostLike = useCallback(async (postId: string) => {
-    if (!authUser) return;
-    const { data: existing, error: lookupError } = await supabase.from('post_likes').select('post_id').eq('post_id', postId).eq('user_id', authUser.id).maybeSingle();
-    if (lookupError) throw lookupError;
-    if (existing) {
-      const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', authUser.id);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: authUser.id });
-      if (error) throw error;
-    }
-    void refreshRuntime(authUser.id, authUser.email);
-  }, [authUser, refreshRuntime]);
-
-  const toggleCommentLike = useCallback(async (_postId: string, commentId: string) => {
-    if (!authUser) return;
-    const { data: existing, error: lookupError } = await supabase.from('comment_likes').select('comment_id').eq('comment_id', commentId).eq('user_id', authUser.id).maybeSingle();
-    if (lookupError) throw lookupError;
-    if (existing) {
-      const { error } = await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', authUser.id);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: authUser.id });
-      if (error) throw error;
-    }
-    void refreshRuntime(authUser.id, authUser.email);
-  }, [authUser, refreshRuntime]);
-
-  const addComment = useCallback(async (postId: string, body: string, parentId?: string) => {
-    if (!authUser || !body.trim()) return;
-    const { error } = await supabase.from('comments').insert({ post_id: postId, user_id: authUser.id, parent_id: parentId ?? null, body: body.trim() });
-    if (error) throw error;
-    void refreshRuntime(authUser.id, authUser.email);
-  }, [authUser, refreshRuntime]);
-
+  const togglePostLike = useCallback(async (postId: string) => { if (!authUser) return; const { data: existing, error: lookupError } = await supabase.from('post_likes').select('post_id').eq('post_id', postId).eq('user_id', authUser.id).maybeSingle(); if (lookupError) throw lookupError; if (existing) { const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', authUser.id); if (error) throw error; } else { const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: authUser.id }); if (error) throw error; } void refreshRuntime(authUser.id, authUser.email); }, [authUser, refreshRuntime]);
+  const toggleCommentLike = useCallback(async (_postId: string, commentId: string) => { if (!authUser) return; const { data: existing, error: lookupError } = await supabase.from('comment_likes').select('comment_id').eq('comment_id', commentId).eq('user_id', authUser.id).maybeSingle(); if (lookupError) throw lookupError; if (existing) { const { error } = await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', authUser.id); if (error) throw error; } else { const { error } = await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: authUser.id }); if (error) throw error; } void refreshRuntime(authUser.id, authUser.email); }, [authUser, refreshRuntime]);
+  const addComment = useCallback(async (postId: string, body: string, parentId?: string) => { if (!authUser || !body.trim()) return; const { error } = await supabase.from('comments').insert({ post_id: postId, user_id: authUser.id, parent_id: parentId ?? null, body: body.trim() }); if (error) throw error; void refreshRuntime(authUser.id, authUser.email); }, [authUser, refreshRuntime]);
   const value = useMemo<AppState>(() => ({ user, isAuthenticated: !!authUser, isGuest, notifications, awards, certificates, orders, feed, login, register, loginAsGuest, logout, updateProfile, markNotificationRead, markAllNotificationsRead, addPoints, addNotification, addOrder, togglePostLike, toggleCommentLike, addComment, toast }), [user, authUser, isGuest, notifications, awards, certificates, orders, feed, login, register, loginAsGuest, logout, updateProfile, markNotificationRead, markAllNotificationsRead, addPoints, addNotification, addOrder, togglePostLike, toggleCommentLike, addComment, toast]);
-
-  return (
-    <AppContext.Provider value={value}>
-      {children}
-      <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none">
-        {toasts.map((t) => <div key={t.id} className={`pointer-events-auto px-4 py-3 rounded-xl shadow-pop text-sm font-medium animate-slide-up flex items-center gap-2 ${t.type === 'success' ? 'bg-moss-600 text-white' : t.type === 'error' ? 'bg-err text-white' : 'bg-ink-700 text-white'}`}><span className="w-1.5 h-1.5 rounded-full bg-white/80" />{t.message}</div>)}
-      </div>
-    </AppContext.Provider>
-  );
+  return <AppContext.Provider value={value}>{children}<div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none">{toasts.map((t)=><div key={t.id} className={`pointer-events-auto px-4 py-3 rounded-xl shadow-pop text-sm font-medium animate-slide-up flex items-center gap-2 ${t.type==='success'?'bg-moss-600 text-white':t.type==='error'?'bg-err text-white':'bg-ink-700 text-white'}`}><span className="w-1.5 h-1.5 rounded-full bg-white/80"/>{t.message}</div>)}</div></AppContext.Provider>;
 }
-
-export function useApp() {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used within AppProvider');
-  return ctx;
-}
+export function useApp(){const ctx=useContext(AppContext);if(!ctx)throw new Error('useApp must be used within AppProvider');return ctx;}
