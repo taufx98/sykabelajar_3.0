@@ -26,7 +26,7 @@ export function CompetitionWorkPage() {
   const [submitted, setSubmitted] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [error, setError] = useState('');
-  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const saveTimers = useRef<Record<string, number>>({});
 
   useEffect(() => {
     let alive = true;
@@ -64,33 +64,30 @@ export function CompetitionWorkPage() {
     if (!attempt?.expires_at) return 0;
     return Math.max(0, Math.floor((new Date(attempt.expires_at).getTime() - Date.now()) / 1000));
   }, [attempt]);
-  const [clock, setClock] = useState(timeLeft);
+  const [clock, setClock] = useState(0);
 
   useEffect(() => {
     setClock(timeLeft);
   }, [timeLeft]);
 
   useEffect(() => {
-    if (!attempt || submitted) return;
-    const timer = window.setInterval(() => setClock(Math.max(0, Math.floor((new Date(attempt.expires_at ?? '').getTime() - Date.now()) / 1000))), 1000);
+    if (!attempt || submitted || !attempt.expires_at) return;
+    const timer = window.setInterval(() => setClock(Math.max(0, Math.floor((new Date(attempt.expires_at as string).getTime() - Date.now()) / 1000))), 1000);
     return () => window.clearInterval(timer);
   }, [attempt, submitted]);
-
-  useEffect(() => {
-    if (clock === 0 && attempt && !submitted && !submitting) void handleSubmit(true);
-  }, [clock, attempt, submitted, submitting]);
 
   if (!isAuthenticated) return <div className="p-8 text-center text-slate-400">Silakan login terlebih dahulu untuk mengerjakan lomba.</div>;
   if (loading) return <div className="min-h-[60vh] flex items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2" size={20} /> Memuat ujian...</div>;
   if (error) return <div className="p-8 text-center"><p className="text-red-300 mb-4">{error}</p><Link to="/home"><Button variant="ghost">Kembali</Button></Link></div>;
   if (!competition || !attempt) return <div className="p-8 text-center text-slate-400">Data ujian tidak tersedia.</div>;
 
+  const currentAttempt = attempt;
   const setAnswer = (qid: string, value: string) => {
     setAnswers((current) => ({ ...current, [qid]: value }));
     setSavedFlash(true);
     window.clearTimeout(saveTimers.current[qid]);
     saveTimers.current[qid] = window.setTimeout(() => setSavedFlash(false), 1200);
-    void saveAnswer(attempt.id, qid, value).catch((e: any) => toast(e?.message ?? 'Jawaban gagal disimpan.', 'error'));
+    void saveAnswer(currentAttempt.id, qid, value).catch((e: any) => toast(e?.message ?? 'Jawaban gagal disimpan.', 'error'));
   };
 
   const answeredCount = Object.values(answers).filter(Boolean).length;
@@ -104,7 +101,7 @@ export function CompetitionWorkPage() {
     }
     setSubmitting(true);
     try {
-      const result = await submitAttempt(attempt.id);
+      const result = await submitAttempt(currentAttempt.id);
       setAttempt(result);
       setSubmitted(true);
       fireConfetti();
@@ -119,6 +116,10 @@ export function CompetitionWorkPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (clock === 0 && !submitted && !submitting && currentAttempt.expires_at && new Date(currentAttempt.expires_at).getTime() <= Date.now()) {
+    void handleSubmit(true);
   }
 
   if (questions.length === 0) return <div className="p-8 text-center"><p className="text-slate-400">Lomba ini belum memiliki soal online yang dipublikasikan.</p><Link to={`/lomba/${competition.slug}`}><Button variant="ghost" className="mt-4">Kembali</Button></Link></div>;
