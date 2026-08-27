@@ -17,4 +17,19 @@ export const liveFeed: FeedPost[] = [];
 export const liveQuestions: Record<string, Question[]> = {};
 export interface PrintCatalogItem { id: string; category: 'sertifikat' | 'medali' | 'emblem'; name: string; price: number; preview?: string; }
 export const printCatalog: PrintCatalogItem[] = [];
+
+// Compatibility shims only. Every collection is empty and populated exclusively from backend runtime services.
+export const demoUsers = liveUsers;
+export const demoCompetitions = liveCompetitions;
+export const demoDailyTasks = liveDailyTasks;
+export const demoLeaderboard = liveLeaderboard;
+export const demoAwards = liveAwards;
+export const demoCertificates = liveCertificates;
+export const demoNotifications = liveNotifications;
+export const demoOrders = liveOrders;
+export const demoFeed = liveFeed;
+export const demoQuestions = liveQuestions;
+export const PRINT_CATALOG = printCatalog;
+export const WA_NUMBER = '';
+
 export function getEmblem(_id: string): Emblem | undefined { return undefined; }
