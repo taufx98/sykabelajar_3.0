@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE html>
-<html b:version='2' class='v2' expr:dir='data:blog.languageDirection' xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/2005/gml/b' xmlns:data='http://www.google.com/2005/gml/data' xmlns:expr='http://www.google.com/2005/gml/expr'>
+<html b:version='2' class='v2' expr:dir='data:blog.languageDirection' xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/2005/gml/b' xmlns:data='http://www.google.com/2005/gml/data' xmlns:expr='http://www.w3.org/1999/xhtml'>
 <head>
   <meta charset='UTF-8'/>
   <meta content='width=device-width, initial-scale=1, viewport-fit=cover' name='viewport'/>
@@ -30,7 +30,7 @@
   <script type='text/javascript'>
     //<![CDATA[
     window.SYKA_BLOGGER_CONFIG={
-      appBase:'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar_3.0@e7216c81284fd9bb1729799f6fee9c0e6ed08fd3',
+      appBase:'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar_3.0@bc70360ca1460fc54b9482f5bf70b3fcb3c045c4',
       supabaseUrl:'https://jrfogwueytiddnanetth.supabase.co',
       cloudinaryCloudName:'sykabelajar',
       cloudinaryUploadPreset:'sykabelajar_preset'
@@ -40,8 +40,8 @@
       function css(url){return new Promise(function(ok,no){var l=document.createElement('link');l.rel='stylesheet';l.href=url;l.onload=ok;l.onerror=no;document.head.appendChild(l);});}
       function js(url){return new Promise(function(ok,no){var s=document.createElement('script');s.type='module';s.src=url;s.onload=ok;s.onerror=no;document.body.appendChild(s);});}
       Promise.all([
-        css(window.SYKA_BLOGGER_CONFIG.appBase+'/styles.min.css?v=14'),
-        js(window.SYKA_BLOGGER_CONFIG.appBase+'/app.js?v=14')
+        css(window.SYKA_BLOGGER_CONFIG.appBase+'/styles.min.css?v=15'),
+        js(window.SYKA_BLOGGER_CONFIG.appBase+'/app.js?v=15')
       ]).catch(function(e){console.error('[SykaBelajar] bundle load failed',e);root.innerHTML='<div class="blogger-noscript"><strong>SykaBelajar sedang memuat ulang.</strong><br/>Bundle aplikasi belum berhasil dimuat. Periksa deployment gh-pages dan refresh halaman.</div>';});
     })();
     //]]>
