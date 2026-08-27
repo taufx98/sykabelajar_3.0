@@ -21,7 +21,7 @@ export async function submitRegistration(input: SubmitRegistrationInput) {
     .maybeSingle();
 
   if (lookupError) throw lookupError;
-  if (existing) return existing;
+  if (existing) return { record: existing, created: false };
 
   const { data, error } = await supabase
     .from('registrations')
@@ -42,5 +42,5 @@ export async function submitRegistration(input: SubmitRegistrationInput) {
     .single();
 
   if (error) throw error;
-  return data;
+  return { record: data, created: true };
 }
