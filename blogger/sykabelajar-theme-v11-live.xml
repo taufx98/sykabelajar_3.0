@@ -14,7 +14,7 @@
     html,body{margin:0;padding:0;background:#020617;color:#e2e8f0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     *,*:before,*:after{box-sizing:border-box}
     a{text-decoration:none;color:inherit}
-    #page-root{min-height:100vh}
+    #page-root,#root{min-height:100vh}
     .blogger-shell{min-height:100vh;background:#020617}
     .blogger-noscript{max-width:720px;margin:40px auto;padding:20px;border:1px solid #334155;border-radius:16px;color:#cbd5e1;background:#0f172a}
     .blogger-hidden{display:none!important}
@@ -23,13 +23,14 @@
 <body>
   <div class='blogger-shell'>
     <div id='page-root'></div>
+    <div id='root' class='blogger-hidden'></div>
     <noscript><div class='blogger-noscript'>SykaBelajar membutuhkan JavaScript untuk menjalankan aplikasi.</div></noscript>
     <b:section class='blogger-hidden' id='main' maxwidgets='1' showaddelement='no'/>
   </div>
   <script type='text/javascript'>
     //<![CDATA[
     window.SYKA_BLOGGER_CONFIG={
-      appBase:'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar_3.0@gh-pages',
+      appBase:'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar_3.0@ca2f898e62772135a1d970dca8266eeb21e86820',
       supabaseUrl:'https://jrfogwueytiddnanetth.supabase.co',
       cloudinaryCloudName:'sykabelajar',
       cloudinaryUploadPreset:'sykabelajar_preset'
@@ -39,9 +40,9 @@
       function css(url){return new Promise(function(ok,no){var l=document.createElement('link');l.rel='stylesheet';l.href=url;l.onload=ok;l.onerror=no;document.head.appendChild(l);});}
       function js(url){return new Promise(function(ok,no){var s=document.createElement('script');s.type='module';s.src=url;s.onload=ok;s.onerror=no;document.body.appendChild(s);});}
       Promise.all([
-        css(window.SYKA_BLOGGER_CONFIG.appBase+'/styles.min.css?v=11'),
-        js(window.SYKA_BLOGGER_CONFIG.appBase+'/app.js?v=11')
-      ]).catch(function(e){console.error('[SykaBelajar] bundle load failed',e);root.innerHTML='<div class="blogger-noscript"><strong>SykaBelajar sedang memuat ulang.</strong><br/>Bundle aplikasi belum berhasil dimuat. Pastikan theme menggunakan XML v11 Live dan deployment gh-pages tersedia.</div>';});
+        css(window.SYKA_BLOGGER_CONFIG.appBase+'/styles.min.css?v=12'),
+        js(window.SYKA_BLOGGER_CONFIG.appBase+'/app.js?v=12')
+      ]).catch(function(e){console.error('[SykaBelajar] bundle load failed',e);root.innerHTML='<div class="blogger-noscript"><strong>SykaBelajar sedang memuat ulang.</strong><br/>Bundle aplikasi belum berhasil dimuat. Periksa deployment gh-pages dan refresh halaman.</div>';});
     })();
     //]]>
   </script>
