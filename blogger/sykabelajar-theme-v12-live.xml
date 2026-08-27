@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE html>
-<html b:version='2' class='v2' expr:dir='data:blog.languageDirection' xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/2005/gml/b' xmlns:data='http://www.google.com/2005/gml/data' xmlns:expr='http://www.google.com/2005/gml/expr'>
+<html b:version='2' class='v2' expr:dir='data:blog.languageDirection' xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/2005/gml/b' xmlns:data='http://www.google.com/2005/gml/data' xmlns:expr='http://www.google.com/1999/xhtml'>
 <head>
   <meta charset='UTF-8'/>
   <meta content='width=device-width, initial-scale=1, viewport-fit=cover' name='viewport'/>
@@ -22,7 +22,6 @@
 </head>
 <body>
   <div class='blogger-shell'>
-    <!-- Both mount ids are intentional: v12 supports the current React entrypoint (#page-root) and legacy bundles (#root). Only one is used by React. -->
     <div id='page-root'></div>
     <div id='root' class='blogger-hidden'></div>
     <noscript><div class='blogger-noscript'>SykaBelajar membutuhkan JavaScript untuk menjalankan aplikasi.</div></noscript>
@@ -31,7 +30,7 @@
   <script type='text/javascript'>
     //<![CDATA[
     window.SYKA_BLOGGER_CONFIG={
-      appBase:'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar_3.0@ca2f898e62772135a1d970dca8266eeb21e86820',
+      appBase:'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar_3.0@55ac1bdf385be79aec12eca524af11fd8369960e',
       supabaseUrl:'https://jrfogwueytiddnanetth.supabase.co',
       cloudinaryCloudName:'sykabelajar',
       cloudinaryUploadPreset:'sykabelajar_preset'
@@ -41,8 +40,8 @@
       function css(url){return new Promise(function(ok,no){var l=document.createElement('link');l.rel='stylesheet';l.href=url;l.onload=ok;l.onerror=no;document.head.appendChild(l);});}
       function js(url){return new Promise(function(ok,no){var s=document.createElement('script');s.type='module';s.src=url;s.onload=ok;s.onerror=no;document.body.appendChild(s);});}
       Promise.all([
-        css(window.SYKA_BLOGGER_CONFIG.appBase+'/styles.min.css?v=12'),
-        js(window.SYKA_BLOGGER_CONFIG.appBase+'/app.js?v=12')
+        css(window.SYKA_BLOGGER_CONFIG.appBase+'/styles.min.css?v=13'),
+        js(window.SYKA_BLOGGER_CONFIG.appBase+'/app.js?v=13')
       ]).catch(function(e){console.error('[SykaBelajar] bundle load failed',e);root.innerHTML='<div class="blogger-noscript"><strong>SykaBelajar sedang memuat ulang.</strong><br/>Bundle aplikasi belum berhasil dimuat. Periksa deployment gh-pages dan refresh halaman.</div>';});
     })();
     //]]>
