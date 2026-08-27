@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { User, AppNotification, Order, Award, Certificate, Comment, FeedPost } from '@/types';
+import type { User, AppNotification, Order, Award, Certificate, FeedPost } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { signIn, signUp, signOut } from '@/services/auth.service';
 import { getProfileById, updateProfile as updateProfileRecord } from '@/services/profile.service';
-import { hydrateRuntime, mapProfileToUser } from '@/services/runtime.service';
-import { demoAwards, demoCertificates, demoFeed, demoNotifications, demoOrders, demoUsers } from '@/data/live';
+import { hydrateRuntime, mapProfileToUser, resetRuntimeCollections } from '@/services/runtime.service';
+import { demoAwards, demoCertificates, demoFeed, demoNotifications, demoOrders, demoLeaderboard } from '@/data/live';
 
 interface AppState {
   user: User | null;
@@ -34,7 +34,7 @@ interface AppState {
 const AppContext = createContext<AppState | null>(null);
 const GUEST_KEY = 'sykabelajar_guest_mode_v1';
 
-function syncCollectionsIntoReactState(setters: {
+function publishRuntimeState(setters: {
   setNotifications: (v: AppNotification[]) => void;
   setAwards: (v: Award[]) => void;
   setCertificates: (v: Certificate[]) => void;
@@ -59,59 +59,75 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [feed, setFeed] = useState<FeedPost[]>([]);
   const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' }[]>([]);
 
-  const refresh = useCallback(async (userId?: string, email?: string) => {
+  const publish = useCallback(() => {
+    publishRuntimeState({ setNotifications, setAwards, setCertificates, setOrders, setFeed });
+  }, []);
+
+  const refreshRuntime = useCallback(async (userId?: string, email?: string) => {
     try {
       await hydrateRuntime(userId);
+      publish();
       if (userId) {
-        const fresh = await getProfileById(userId);
-        if (fresh) {
-          const liveEntry = demoUsers.find((item) => item.id === userId);
-          const mapped = mapProfileToUser(fresh, email);
-          setUser({ ...mapped, points: liveEntry?.points ?? mapped.points, rank: liveEntry?.rank ?? mapped.rank });
+        const profile = await getProfileById(userId);
+        if (profile) {
+          const mapped = mapProfileToUser(profile, email);
+          const leaderboardEntry = demoLeaderboard.find((entry) => entry.userId === userId);
+          setUser({ ...mapped, points: leaderboardEntry?.points ?? mapped.points, rank: leaderboardEntry?.rank ?? mapped.rank });
         }
-      } else {
-        setUser(null);
       }
-      syncCollectionsIntoReactState({ setNotifications, setAwards, setCertificates, setOrders, setFeed });
-      return true;
     } catch (error) {
       console.error('[SykaBelajar] runtime hydration failed', error);
-      syncCollectionsIntoReactState({ setNotifications, setAwards, setCertificates, setOrders, setFeed });
-      return false;
+      publish();
     }
-  }, []);
+  }, [publish]);
 
   useEffect(() => {
     let alive = true;
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!alive) return;
-      if (data.session?.user) {
-        setAuthUser({ id: data.session.user.id, email: data.session.user.email });
-        setIsGuest(false);
-        localStorage.removeItem(GUEST_KEY);
-        await refresh(data.session.user.id, data.session.user.email);
-      } else {
-        setAuthUser(null);
-        await refresh();
+    const bootstrap = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (!alive || error) return;
+        if (data.session?.user) {
+          const sessionUser = { id: data.session.user.id, email: data.session.user.email ?? undefined };
+          setAuthUser(sessionUser);
+          setIsGuest(false);
+          localStorage.removeItem(GUEST_KEY);
+          void refreshRuntime(sessionUser.id, sessionUser.email);
+        } else {
+          resetRuntimeCollections();
+          publish();
+          void refreshRuntime();
+        }
+      } catch (error) {
+        console.error('[SykaBelajar] auth bootstrap failed', error);
       }
-    });
+    };
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    void bootstrap();
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!alive) return;
       if (session?.user) {
-        setAuthUser({ id: session.user.id, email: session.user.email });
+        const sessionUser = { id: session.user.id, email: session.user.email ?? undefined };
+        setAuthUser(sessionUser);
         setIsGuest(false);
         localStorage.removeItem(GUEST_KEY);
-        await refresh(session.user.id, session.user.email);
+        void refreshRuntime(sessionUser.id, sessionUser.email);
       } else {
         setAuthUser(null);
         setUser(null);
-        if (!isGuest) await refresh();
+        if (!isGuest) {
+          resetRuntimeCollections();
+          publish();
+          void refreshRuntime();
+        }
       }
     });
 
-    return () => { alive = false; subscription.subscription.unsubscribe(); };
-  }, [refresh, isGuest]);
+    return () => {
+      alive = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, [isGuest, publish, refreshRuntime]);
 
   const toast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = crypto.randomUUID();
@@ -123,19 +139,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const result = await signIn(email.trim(), password);
       if (!result.user) return { ok: false, error: 'Login gagal: sesi pengguna tidak tersedia.' };
+      setAuthUser({ id: result.user.id, email: result.user.email ?? undefined });
       setIsGuest(false);
       localStorage.removeItem(GUEST_KEY);
+      void refreshRuntime(result.user.id, result.user.email ?? undefined);
       return { ok: true };
     } catch (error: any) {
       return { ok: false, error: error?.message ?? 'Email atau password tidak valid.' };
     }
-  }, []);
+  }, [refreshRuntime]);
 
   const register = useCallback(async (data: Partial<User> & { email: string; password: string }) => {
     try {
       await signUp(data.email.trim(), data.password, {
-        username: data.username ?? '', full_name: data.displayName ?? '', account_type: data.role === 'guru' ? 'teacher' : 'student',
-        birth_date: data.birthDate, institution: data.school, grade: data.educationLevel,
+        username: data.username ?? '',
+        full_name: data.displayName ?? '',
+        account_type: data.role === 'guru' ? 'teacher' : 'student',
+        birth_date: data.birthDate,
+        institution: data.school,
+        grade: data.educationLevel,
       });
       return { ok: true };
     } catch (error: any) {
@@ -144,14 +166,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loginAsGuest = useCallback(() => {
-    localStorage.setItem(GUEST_KEY, '1'); setIsGuest(true); setAuthUser(null); setUser(null); void refresh();
-  }, [refresh]);
+    localStorage.setItem(GUEST_KEY, '1');
+    setIsGuest(true);
+    setAuthUser(null);
+    setUser(null);
+    resetRuntimeCollections();
+    publish();
+    void refreshRuntime();
+  }, [publish, refreshRuntime]);
 
   const logout = useCallback(async () => {
-    try { await signOut(); } finally {
-      localStorage.removeItem(GUEST_KEY); setAuthUser(null); setUser(null); setIsGuest(false); void refresh();
+    try {
+      await signOut();
+    } finally {
+      localStorage.removeItem(GUEST_KEY);
+      setAuthUser(null);
+      setUser(null);
+      setIsGuest(false);
+      resetRuntimeCollections();
+      publish();
+      void refreshRuntime();
     }
-  }, [refresh]);
+  }, [publish, refreshRuntime]);
 
   const updateProfile = useCallback(async (data: Partial<User>) => {
     if (!authUser) return;
@@ -164,9 +200,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.profilePhoto !== undefined) patch.avatar_url = data.profilePhoto;
     if (data.educationLevel !== undefined) patch.grade = data.educationLevel;
     const fresh = await updateProfileRecord(authUser.id, patch);
-    const liveEntry = demoUsers.find((item) => item.id === authUser.id);
     const mapped = mapProfileToUser(fresh, authUser.email);
-    setUser({ ...mapped, points: liveEntry?.points ?? mapped.points, rank: liveEntry?.rank ?? mapped.rank });
+    setUser((current) => current ? { ...current, ...mapped } : mapped);
   }, [authUser]);
 
   const markNotificationRead = useCallback(async (id: string) => {
@@ -201,31 +236,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: existing, error: lookupError } = await supabase.from('post_likes').select('post_id').eq('post_id', postId).eq('user_id', authUser.id).maybeSingle();
     if (lookupError) throw lookupError;
     if (existing) {
-      const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', authUser.id); if (error) throw error;
+      const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', authUser.id);
+      if (error) throw error;
     } else {
-      const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: authUser.id }); if (error) throw error;
+      const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: authUser.id });
+      if (error) throw error;
     }
-    await refresh(authUser.id, authUser.email);
-  }, [authUser, refresh]);
+    void refreshRuntime(authUser.id, authUser.email);
+  }, [authUser, refreshRuntime]);
 
   const toggleCommentLike = useCallback(async (_postId: string, commentId: string) => {
     if (!authUser) return;
     const { data: existing, error: lookupError } = await supabase.from('comment_likes').select('comment_id').eq('comment_id', commentId).eq('user_id', authUser.id).maybeSingle();
     if (lookupError) throw lookupError;
     if (existing) {
-      const { error } = await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', authUser.id); if (error) throw error;
+      const { error } = await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', authUser.id);
+      if (error) throw error;
     } else {
-      const { error } = await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: authUser.id }); if (error) throw error;
+      const { error } = await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: authUser.id });
+      if (error) throw error;
     }
-    await refresh(authUser.id, authUser.email);
-  }, [authUser, refresh]);
+    void refreshRuntime(authUser.id, authUser.email);
+  }, [authUser, refreshRuntime]);
 
   const addComment = useCallback(async (postId: string, body: string, parentId?: string) => {
     if (!authUser || !body.trim()) return;
     const { error } = await supabase.from('comments').insert({ post_id: postId, user_id: authUser.id, parent_id: parentId ?? null, body: body.trim() });
     if (error) throw error;
-    await refresh(authUser.id, authUser.email);
-  }, [authUser, refresh]);
+    void refreshRuntime(authUser.id, authUser.email);
+  }, [authUser, refreshRuntime]);
 
   const value = useMemo<AppState>(() => ({ user, isAuthenticated: !!authUser, isGuest, notifications, awards, certificates, orders, feed, login, register, loginAsGuest, logout, updateProfile, markNotificationRead, markAllNotificationsRead, addPoints, addNotification, addOrder, togglePostLike, toggleCommentLike, addComment, toast }), [user, authUser, isGuest, notifications, awards, certificates, orders, feed, login, register, loginAsGuest, logout, updateProfile, markNotificationRead, markAllNotificationsRead, addPoints, addNotification, addOrder, togglePostLike, toggleCommentLike, addComment, toast]);
 
