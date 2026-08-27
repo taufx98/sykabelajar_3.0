@@ -8,19 +8,17 @@ export async function issueCertificateForAward(awardId: string) {
 }
 
 export async function getPublicCertificate(code: string) {
-  const { data, error } = await supabase
-    .from('certificate_verifications')
-    .select('certificate_id,verification_code,status,public_name,competition_title,achievement_title,issued_at,revoked_at')
-    .eq('verification_code', code)
-    .maybeSingle();
+  const { data, error } = await supabase.from('certificate_verifications').select('certificate_id,verification_code,status,public_name,competition_title,achievement_title,issued_at,revoked_at').eq('verification_code', code).maybeSingle();
   if (error) throw error;
   return data;
 }
 
-export async function persistCertificateAsset(certificateId: string, file: File, revision = 1): Promise<CloudinaryUploadResult> {
-  const asset = await uploadRawFile(file, `sykabelajar/certificates/${certificateId}/rev-${revision}`);
+export async function persistCertificateAssetByCode(code: string, file: File, revision = 1): Promise<CloudinaryUploadResult> {
+  const verification = await getPublicCertificate(code);
+  if (!verification?.certificate_id) throw new Error('Certificate verification code tidak ditemukan.');
+  const asset = await uploadRawFile(file, `sykabelajar/certificates/${verification.certificate_id}/rev-${revision}`);
   const { error } = await supabase.rpc('create_certificate_asset', {
-    p_certificate_id: certificateId,
+    p_certificate_id: verification.certificate_id,
     p_public_id: asset.public_id,
     p_secure_url: asset.secure_url,
     p_width: asset.width ?? null,
