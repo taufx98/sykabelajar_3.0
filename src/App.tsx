@@ -1,3 +1,4 @@
+import { useEffect, type ReactNode } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { type ReactNode } from 'react';
 import { AppProvider, useApp } from '@/store/AppContext';
@@ -23,6 +24,19 @@ function AppRoute({ children }: { children: ReactNode }) {
   const location = useLocation();
   if (!isAuthenticated && !isGuest) return <Navigate to="/" state={{ from: location }} replace />;
   return <>{children}</>;
+}
+
+function RuntimeGlobals() {
+  const { toast } = useApp();
+
+  useEffect(() => {
+    globalThis.toast = toast;
+    return () => {
+      globalThis.toast = undefined;
+    };
+  }, [toast]);
+
+  return null;
 }
 
 function AppRoutes() {
@@ -62,6 +76,7 @@ export default function App() {
   return (
     <AppProvider>
       <HashRouter>
+        <RuntimeGlobals />
         <AppRoutes />
       </HashRouter>
     </AppProvider>
