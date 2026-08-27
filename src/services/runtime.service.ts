@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { demoAwards, demoCertificates, demoCompetitions, demoDailyTasks, demoFeed, demoLeaderboard, demoNotifications, demoOrders, demoUsers, demoQuestions, PRINT_CATALOG, type PrintCatalogItem } from '@/data/live';
-import type { Award, AppNotification, Certificate, Competition, DailyTask, FeedPost, LeaderboardEntry, User, Order } from '@/types';
+import type { Award, AppNotification, Certificate, Competition, DailyTask, FeedPost, LeaderboardEntry, User, Order, OrderItem, OrderStatus } from '@/types';
 import { getProfileById } from '@/services/profile.service';
 
 export function resetRuntimeCollections() {
@@ -57,21 +57,14 @@ export async function loadUsers() {
   if (error) throw error;
   const rows = (data ?? []) as Array<Record<string, unknown>>;
   demoLeaderboard.push(...rows.map((row, index): LeaderboardEntry => ({
-    rank: Number(row.rank ?? index + 1),
-    userId: String(row.user_id),
-    username: String(row.username ?? ''),
-    displayName: String(row.display_name ?? row.username ?? 'Pengguna'),
-    profilePhoto: row.avatar_url ? String(row.avatar_url) : undefined,
-    points: Number(row.xp ?? 0),
-    school: row.institution ? String(row.institution) : undefined,
-    educationLevel: undefined,
-    emblems: [],
-    change: 0,
+    rank: Number(row.rank ?? index + 1), userId: String(row.user_id), username: String(row.username ?? ''),
+    displayName: String(row.display_name ?? row.username ?? 'Pengguna'), profilePhoto: row.avatar_url ? String(row.avatar_url) : undefined,
+    points: Number(row.xp ?? 0), school: row.institution ? String(row.institution) : undefined, educationLevel: undefined, emblems: [], change: 0,
   })));
   demoUsers.push(...demoLeaderboard.map((u): User => ({
-    id: u.userId, username: u.username, email: '', displayName: u.displayName, role: 'pelajar',
-    school: u.school, educationLevel: u.educationLevel, points: u.points, rank: u.rank, joinedAt: '',
-    favoriteCategories: [], profilePhoto: u.profilePhoto, badges: [], emblems: [], followers: 0, following: 0,
+    id: u.userId, username: u.username, email: '', displayName: u.displayName, role: 'pelajar', school: u.school,
+    educationLevel: u.educationLevel, points: u.points, rank: u.rank, joinedAt: '', favoriteCategories: [], profilePhoto: u.profilePhoto,
+    badges: [], emblems: [], followers: 0, following: 0,
   })));
 }
 
@@ -79,14 +72,12 @@ export async function loadCompetitions() {
   const { data, error } = await supabase.rpc('get_public_competitions');
   if (error) throw error;
   demoCompetitions.push(...((data ?? []) as Array<Record<string, unknown>>).map((row): Competition => ({
-    id: String(row.id), slug: String(row.slug ?? ''), title: String(row.title ?? ''),
-    category: String(row.category ?? 'mtk') as Competition['category'], posterUrl: row.poster_url ? String(row.poster_url) : undefined,
-    shortDesc: String(row.short_description ?? ''), description: String(row.description ?? ''),
-    juknis: row.juknis_url ? String(row.juknis_url) : '', juknisPdfUrl: row.juknis_url ? String(row.juknis_url) : undefined,
-    prizes: [], points: 0, startDate: String(row.starts_at ?? row.registration_starts_at ?? ''),
-    endDate: String(row.ends_at ?? row.announcement_at ?? ''), registrationDeadline: String(row.registration_ends_at ?? ''),
-    status: mapCompetitionStatus(String(row.status ?? 'PUBLISHED')), participants: Number(row.participant_count ?? 0),
-    level: 'Nasional', twibbonUrl: '', hasQuestions: false,
+    id: String(row.id), slug: String(row.slug ?? ''), title: String(row.title ?? ''), category: String(row.category ?? 'mtk') as Competition['category'],
+    posterUrl: row.poster_url ? String(row.poster_url) : undefined, shortDesc: String(row.short_description ?? ''), description: String(row.description ?? ''),
+    juknis: row.juknis_url ? String(row.juknis_url) : '', juknisPdfUrl: row.juknis_url ? String(row.juknis_url) : undefined, prizes: [], points: 0,
+    startDate: String(row.starts_at ?? row.registration_starts_at ?? ''), endDate: String(row.ends_at ?? row.announcement_at ?? ''),
+    registrationDeadline: String(row.registration_ends_at ?? ''), status: mapCompetitionStatus(String(row.status ?? 'PUBLISHED')),
+    participants: Number(row.participant_count ?? 0), level: 'Nasional', twibbonUrl: '', hasQuestions: false,
     featured: ['REGISTRATION_OPEN', 'LIVE'].includes(String(row.status)),
   })));
 }
@@ -94,19 +85,29 @@ export async function loadCompetitions() {
 export async function loadNotifications(userId: string) {
   const { data, error } = await supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false });
   if (error) throw error;
-  demoNotifications.push(...((data ?? []) as Array<Record<string, any>>).map((n): AppNotification => ({ id: String(n.id), type: n.type as AppNotification['type'], title: String(n.title ?? ''), body: String(n.body ?? ''), createdAt: String(n.created_at), read: Boolean(n.read_at), link: n.data?.link })));
+  demoNotifications.push(...((data ?? []) as Array<Record<string, any>>).map((n): AppNotification => ({
+    id: String(n.id), type: n.type as AppNotification['type'], title: String(n.title ?? ''), body: String(n.body ?? ''), createdAt: String(n.created_at),
+    read: Boolean(n.read_at), link: n.data?.link,
+  })));
 }
 
 export async function loadAwards(userId: string) {
   const { data, error } = await supabase.from('awards').select('*').eq('user_id', userId).order('issued_at', { ascending: false });
   if (error) throw error;
-  demoAwards.push(...((data ?? []) as Array<Record<string, any>>).map((a): Award => ({ id: String(a.id), type: 'medal', title: String(a.title ?? ''), subtitle: String(a.rank_code ?? ''), date: String(a.issued_at ?? a.created_at), competitionId: a.competition_id ?? undefined, imageUrl: a.emblem_url ?? undefined, color: 'from-moss-400 to-moss-600', points: Number(a.points ?? 0) })));
+  demoAwards.push(...((data ?? []) as Array<Record<string, any>>).map((a): Award => ({
+    id: String(a.id), type: 'medal', title: String(a.title ?? ''), subtitle: String(a.rank_code ?? ''), date: String(a.issued_at ?? a.created_at),
+    competitionId: a.competition_id ?? undefined, imageUrl: a.emblem_url ?? undefined, color: 'from-moss-400 to-moss-600', points: Number(a.points ?? 0),
+  })));
 }
 
 export async function loadCertificates(userId: string) {
   const { data, error } = await supabase.from('certificates').select('*').eq('user_id', userId).order('created_at', { ascending: false });
   if (error) throw error;
-  demoCertificates.push(...((data ?? []) as Array<Record<string, any>>).map((c): Certificate => ({ id: String(c.id), code: String(c.verification_code ?? c.id), userId: String(c.user_id), competitionId: String(c.competition_id), competitionTitle: String(c.competition_title ?? ''), type: (c.certificate_type ?? 'participant') as Certificate['type'], issuedAt: String(c.issued_at ?? c.created_at), verified: ['PUBLISHED', 'VERIFIED'].includes(String(c.status)) })));
+  demoCertificates.push(...((data ?? []) as Array<Record<string, any>>).map((c): Certificate => ({
+    id: String(c.id), code: String(c.verification_code ?? c.id), userId: String(c.user_id), competitionId: String(c.competition_id),
+    competitionTitle: String(c.competition_title ?? ''), type: (c.certificate_type ?? 'participant') as Certificate['type'],
+    issuedAt: String(c.issued_at ?? c.created_at), verified: ['PUBLISHED', 'VERIFIED'].includes(String(c.status)),
+  })));
 }
 
 function normalizeOrderStatus(status: unknown): OrderStatus {
@@ -149,14 +150,20 @@ export async function loadDailyTasks(userId?: string) {
   if (!userId) return;
   const { data, error } = await supabase.from('daily_tasks').select('*').eq('is_active', true).order('sort_order', { ascending: true });
   if (error) throw error;
-  demoDailyTasks.push(...((data ?? []) as Array<Record<string, any>>).map((t): DailyTask => ({ id: String(t.id), title: String(t.title ?? ''), type: String(t.task_type ?? 'assignment') as DailyTask['type'], description: String(t.description ?? ''), points: Number(t.points ?? 0), date: String(t.starts_at ?? t.created_at), expiresAt: String(t.ends_at ?? t.created_at), completed: false, retryUsed: 0, maxRetry: Number(t.max_claims_per_user ?? 1) })));
+  demoDailyTasks.push(...((data ?? []) as Array<Record<string, any>>).map((t): DailyTask => ({
+    id: String(t.id), title: String(t.title ?? ''), type: String(t.task_type ?? 'assignment') as DailyTask['type'], description: String(t.description ?? ''),
+    points: Number(t.points ?? 0), date: String(t.starts_at ?? t.created_at), expiresAt: String(t.ends_at ?? t.created_at), completed: false,
+    retryUsed: 0, maxRetry: Number(t.max_claims_per_user ?? 1),
+  })));
 }
 
 export async function loadPrintCatalog() {
   const { data, error } = await supabase.from('commerce_products').select('id,product_type,name,price,image_url,is_active,sort_order').eq('is_active', true).order('sort_order', { ascending: true });
   if (error) throw error;
   const allowed = new Set(['sertifikat', 'medali', 'emblem']);
-  PRINT_CATALOG.push(...((data ?? []) as Array<Record<string, any>>).filter((row) => allowed.has(String(row.product_type))).map((row): PrintCatalogItem => ({ id: String(row.id), category: normalizeOrderCategory(row.product_type), name: String(row.name ?? ''), price: Number(row.price ?? 0), preview: row.image_url ? String(row.image_url) : undefined })));
+  PRINT_CATALOG.push(...((data ?? []) as Array<Record<string, any>>).filter((row) => allowed.has(String(row.product_type))).map((row): PrintCatalogItem => ({
+    id: String(row.id), category: normalizeOrderCategory(row.product_type), name: String(row.name ?? ''), price: Number(row.price ?? 0), preview: row.image_url ? String(row.image_url) : undefined,
+  })));
 }
 
 export async function hydrateRuntime(userId?: string) {
