@@ -21,7 +21,6 @@ export const LEVEL_LABELS: Record<string, string> = {
   sd: 'SD 4–6 Sederajat', smp: 'SMP 1–3 Sederajat', sma: 'SMA 1–3 Sederajat',
 };
 
-/** Runtime cache. These collections are populated only by runtime.service.ts from Supabase. */
 export const liveUsers: User[] = [];
 export const liveCompetitions: Competition[] = [];
 export const liveDailyTasks: DailyTask[] = [];
@@ -41,11 +40,19 @@ export interface PrintCatalogItem {
   preview?: string;
 }
 
-/** Populated from public.commerce_products at runtime. */
 export const PRINT_CATALOG: PrintCatalogItem[] = [];
-
-/** Optional public contact configuration; empty until configured. */
 export const WA_NUMBER = '';
+
+export const demoUsers = liveUsers;
+export const demoCompetitions = liveCompetitions;
+export const demoDailyTasks = liveDailyTasks;
+export const demoLeaderboard = liveLeaderboard;
+export const demoAwards = liveAwards;
+export const demoCertificates = liveCertificates;
+export const demoNotifications = liveNotifications;
+export const demoOrders = liveOrders;
+export const demoFeed = liveFeed;
+export const demoQuestions = liveQuestions;
 
 export function getEmblem(_id: string): Emblem | undefined {
   return undefined;
