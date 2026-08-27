@@ -33,8 +33,9 @@ export async function getParticipantQuestions(competitionId: string): Promise<Pa
 }
 
 export async function startAttempt(competitionId: string): Promise<Attempt> {
-  const { data, error } = await supabase.rpc('start_competition_attempt', { p_competition_id: competitionId }).single();
+  const { data, error } = await supabase.rpc('start_competition_attempt', { p_competition_id: competitionId });
   if (error) throw error;
+  if (!data) throw new Error('Attempt tidak berhasil dibuat.');
   return data as Attempt;
 }
 
@@ -58,7 +59,8 @@ export async function saveAnswer(attemptId: string, questionId: string, value: s
 }
 
 export async function submitAttempt(attemptId: string): Promise<Attempt> {
-  const { data, error } = await supabase.rpc('submit_competition_attempt', { p_attempt_id: attemptId }).single();
+  const { data, error } = await supabase.rpc('submit_competition_attempt', { p_attempt_id: attemptId });
   if (error) throw error;
+  if (!data) throw new Error('Attempt tidak berhasil dikirim.');
   return data as Attempt;
 }
