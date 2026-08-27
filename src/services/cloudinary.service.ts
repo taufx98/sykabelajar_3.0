@@ -9,9 +9,14 @@ export interface CloudinaryUploadResult {
   resource_type?: string;
 }
 
+function assertFile(file: File, maxBytes = 10 * 1024 * 1024) {
+  if (!file) throw new Error('File wajib dipilih.');
+  if (file.size > maxBytes) throw new Error(`Ukuran file maksimal ${Math.round(maxBytes / 1024 / 1024)}MB.`);
+}
+
 export async function uploadImage(file: File, folder?: string): Promise<CloudinaryUploadResult> {
   if (!file.type.startsWith('image/')) throw new Error('File harus berupa gambar');
-  if (file.size > 5 * 1024 * 1024) throw new Error('Ukuran gambar maksimal 5MB');
+  assertFile(file, 5 * 1024 * 1024);
   if (folder?.includes('/profiles/') || folder?.includes('/covers/')) {
     const kind = folder.includes('/covers/') ? 'cover' : 'profile';
     const formData = new FormData(); formData.append('file', file); formData.append('kind', kind);
@@ -24,6 +29,18 @@ export async function uploadImage(file: File, folder?: string): Promise<Cloudina
   const formData = new FormData(); formData.append('file', file); formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET ?? ''); if (folder) formData.append('folder', folder);
   const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME ?? ''; const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
   if (!response.ok) throw new Error(`Cloudinary upload gagal (${response.status})`);
+  return response.json() as Promise<CloudinaryUploadResult>;
+}
+
+export async function uploadRawFile(file: File, folder?: string): Promise<CloudinaryUploadResult> {
+  assertFile(file, 10 * 1024 * 1024);
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME ?? '';
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET ?? '');
+  if (folder) formData.append('folder', folder);
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`, { method: 'POST', body: formData });
+  if (!response.ok) throw new Error(`Cloudinary file upload gagal (${response.status})`);
   return response.json() as Promise<CloudinaryUploadResult>;
 }
 
