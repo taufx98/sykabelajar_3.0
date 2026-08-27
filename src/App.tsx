@@ -17,6 +17,7 @@ import { EditProfilePage } from '@/pages/EditProfilePage';
 import { NotificationsPage } from '@/pages/NotificationsPage';
 import { OrdersPage } from '@/pages/OrdersPage';
 import { AdminPage } from '@/pages/AdminPage';
+import { AdminRolesPage } from '@/pages/AdminRolesPage';
 import { getUserRoles } from '@/services/role.service';
 import { supabase } from '@/lib/supabase';
 
@@ -30,7 +31,6 @@ function AppRoute({ children }: { children: ReactNode }) {
 function AdminRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useApp();
   const [allowed, setAllowed] = useState<boolean | null>(null);
-
   useEffect(() => {
     let active = true;
     if (!isAuthenticated) { setAllowed(false); return () => { active = false; }; }
@@ -47,7 +47,6 @@ function AdminRoute({ children }: { children: ReactNode }) {
     })();
     return () => { active = false; };
   }, [isAuthenticated]);
-
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (allowed === null) return <div className="min-h-screen flex items-center justify-center text-sm text-slate-500">Memeriksa akses admin…</div>;
   if (!allowed) return <Navigate to="/home" replace />;
@@ -83,6 +82,7 @@ function AppRoutes() {
         <Route path="/orders" element={<OrdersPage />} />
       </Route>
       <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
+      <Route path="/admin/roles" element={<AdminRoute><AdminRolesPage /></AdminRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
