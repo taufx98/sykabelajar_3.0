@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE html>
-<html b:version='2' class='v2' expr:dir='data:blog.languageDirection' xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/2005/gml/b' xmlns:data='http://www.google.com/2005/gml/data' xmlns:expr='http://www.google.com/2005/gml/expr'>
+<html b:version='2' class='v2' expr:dir='data:blog.languageDirection' xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/2005/gml/b' xmlns:data='http://www.google.com/2005/gml/data' xmlns:expr='http://www.w3.org/1999/xhtml'>
 <head>
   <meta charset='UTF-8'/>
   <meta content='width=device-width, initial-scale=1, viewport-fit=cover' name='viewport'/>
@@ -42,7 +42,7 @@
       if(shouldBridge){window.location.replace(window.location.origin+'/#'+path+window.location.search);return;}
       function css(url){return new Promise(function(ok,no){var l=document.createElement('link');l.rel='stylesheet';l.href=url;l.onload=ok;l.onerror=no;document.head.appendChild(l);});}
       function js(url){return new Promise(function(ok,no){var s=document.createElement('script');s.type='module';s.src=url;s.onload=ok;s.onerror=function(){no(new Error('Gagal memuat '+url));};document.body.appendChild(s);});}
-      Promise.all([css(window.SYKA_BLOGGER_CONFIG.appBase+'/styles.min.css?v=17'),js(window.SYKA_BLOGGER_CONFIG.appBase+'/app.js?v=17')]).catch(function(e){console.error('[SykaBelajar] bundle load failed',e);root.innerHTML='<div class="blogger-noscript"><strong>SykaBelajar sedang memuat ulang.</strong><br/>Bundle aplikasi belum berhasil dimuat. Refresh halaman atau periksa deployment gh-pages.</div>';});
+      Promise.all([css(window.SYKA_BLOGGER_CONFIG.appBase+'/styles.min.css?v=18'),js(window.SYKA_BLOGGER_CONFIG.appBase+'/app.js?v=18')]).catch(function(e){console.error('[SykaBelajar] bundle load failed',e);root.innerHTML='<div class="blogger-noscript"><strong>SykaBelajar sedang memuat ulang.</strong><br/>Bundle aplikasi belum berhasil dimuat. Refresh halaman atau periksa deployment gh-pages.</div>';});
     })();
     //]]>
   </script>
