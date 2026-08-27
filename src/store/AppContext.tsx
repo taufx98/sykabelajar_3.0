@@ -1,6 +1,10 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { User, AppNotification, Order, Award, Certificate, Comment, FeedPost } from '@/types';
-import { demoUsers, demoAwards, demoCertificates, demoNotifications, demoOrders, demoFeed } from '@/data/demo';
+import { supabase } from '@/lib/supabase';
+import { signIn, signUp, signOut } from '@/services/auth.service';
+import { getProfileById, updateProfile as updateProfileRecord } from '@/services/profile.service';
+import { hydrateRuntime, mapProfileToUser } from '@/services/runtime.service';
+import { demoAwards, demoCertificates, demoCompetitions, demoDailyTasks, demoFeed, demoLeaderboard, demoNotifications, demoOrders, demoUsers } from '@/data/live';
 
 interface AppState {
   user: User | null;
@@ -11,203 +15,241 @@ interface AppState {
   certificates: Certificate[];
   orders: Order[];
   feed: FeedPost[];
-  login: (email: string, password: string) => { ok: boolean; error?: string };
-  register: (data: Partial<User> & { email: string; password: string }) => { ok: boolean; error?: string };
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  register: (data: Partial<User> & { email: string; password: string }) => Promise<{ ok: boolean; error?: string }>;
   loginAsGuest: () => void;
-  logout: () => void;
-  updateProfile: (data: Partial<User>) => void;
-  markNotificationRead: (id: string) => void;
-  markAllNotificationsRead: () => void;
-  addPoints: (points: number) => void;
-  addNotification: (n: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => void;
+  logout: () => Promise<void>;
+  updateProfile: (data: Partial<User>) => Promise<void>;
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  addPoints: (points: number) => Promise<void>;
+  addNotification: (n: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => Promise<void>;
   addOrder: (order: Order) => void;
-  togglePostLike: (postId: string) => void;
-  toggleCommentLike: (postId: string, commentId: string, replyId?: string) => void;
-  addComment: (postId: string, body: string, parentId?: string) => void;
+  togglePostLike: (postId: string) => Promise<void>;
+  toggleCommentLike: (postId: string, commentId: string, replyId?: string) => Promise<void>;
+  addComment: (postId: string, body: string, parentId?: string) => Promise<void>;
   toast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
+const GUEST_KEY = 'sykabelajar_guest_mode_v1';
 
-const STORAGE_KEY = 'sykabelajar_session_v2';
-
-interface StoredSession {
-  userId: string | null;
-  isGuest: boolean;
-  customUser: User | null;
+function syncCollectionsIntoReactState(setters: {
+  setNotifications: (v: AppNotification[]) => void;
+  setAwards: (v: Award[]) => void;
+  setCertificates: (v: Certificate[]) => void;
+  setOrders: (v: Order[]) => void;
+  setFeed: (v: FeedPost[]) => void;
+}) {
+  setters.setNotifications([...demoNotifications]);
+  setters.setAwards([...demoAwards]);
+  setters.setCertificates([...demoCertificates]);
+  setters.setOrders([...demoOrders]);
+  setters.setFeed([...demoFeed]);
 }
-
-function loadSession(): StoredSession {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as StoredSession;
-  } catch {}
-  return { userId: null, isGuest: false, customUser: null };
-}
-
-function saveSession(s: StoredSession) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-}
-
-const ALL_USERS = [...demoUsers];
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<StoredSession>(() => loadSession());
-  const [customUser, setCustomUser] = useState<User | null>(session.customUser);
-  const [notifications, setNotifications] = useState<AppNotification[]>(demoNotifications);
-  const [awards] = useState<Award[]>(demoAwards);
-  const [certificates] = useState<Certificate[]>(demoCertificates);
-  const [orders, setOrders] = useState<Order[]>(demoOrders);
-  const [feed, setFeed] = useState<FeedPost[]>(demoFeed);
+  const [authUser, setAuthUser] = useState<{ id: string; email?: string } | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [isGuest, setIsGuest] = useState(() => localStorage.getItem(GUEST_KEY) === '1');
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [awards, setAwards] = useState<Award[]>([]);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [feed, setFeed] = useState<FeedPost[]>([]);
   const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' }[]>([]);
 
-  const currentUser: User | null =
-    session.userId === 'custom' && customUser ? customUser : ALL_USERS.find((u) => u.id === session.userId) ?? null;
+  const refresh = useCallback(async (userId?: string, email?: string) => {
+    try {
+      const profile = userId ? await getProfileById(userId) : null;
+      if (profile) setUser({ ...mapProfileToUser(profile, email), points: (demoUsers.find((x) => x.id === userId)?.points ?? 0) });
+      await hydrateRuntime(userId);
+      if (userId) {
+        const fresh = await getProfileById(userId);
+        if (fresh) setUser((previous) => previous ? { ...previous, ...mapProfileToUser(fresh, email) } : mapProfileToUser(fresh, email));
+      } else {
+        setUser(null);
+      }
+      syncCollectionsIntoReactState({ setNotifications, setAwards, setCertificates, setOrders, setFeed });
+      return true;
+    } catch (error) {
+      console.error('[SykaBelajar] runtime hydration failed', error);
+      syncCollectionsIntoReactState({ setNotifications, setAwards, setCertificates, setOrders, setFeed });
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
-    saveSession({ userId: session.userId, isGuest: session.isGuest, customUser });
-  }, [session, customUser]);
+    let alive = true;
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!alive) return;
+      if (data.session?.user) {
+        setAuthUser({ id: data.session.user.id, email: data.session.user.email });
+        setIsGuest(false);
+        localStorage.removeItem(GUEST_KEY);
+        await refresh(data.session.user.id, data.session.user.email);
+      } else if (isGuest) {
+        await refresh();
+      } else {
+        await refresh();
+      }
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!alive) return;
+      if (session?.user) {
+        setAuthUser({ id: session.user.id, email: session.user.email });
+        setIsGuest(false);
+        localStorage.removeItem(GUEST_KEY);
+        await refresh(session.user.id, session.user.email);
+      } else {
+        setAuthUser(null);
+        setUser(null);
+        if (!isGuest) await refresh();
+      }
+    });
+
+    return () => {
+      alive = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, [refresh, isGuest]);
 
   const toast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    const id = Math.random().toString(36).slice(2);
-    setToasts((t) => [...t, { id, message, type }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
+    const id = crypto.randomUUID();
+    setToasts((items) => [...items, { id, message, type }]);
+    window.setTimeout(() => setToasts((items) => items.filter((x) => x.id !== id)), 3500);
   }, []);
 
-  const login = useCallback((email: string, _password: string) => {
-    const found = ALL_USERS.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (!found) return { ok: false, error: 'Email belum terdaftar. Coba aruna@sykabelajar.id' };
-    setSession({ userId: found.id, isGuest: false, customUser: null });
-    return { ok: true };
-  }, []);
-
-  const register = useCallback((data: Partial<User> & { email: string; password: string }) => {
-    if (ALL_USERS.some((u) => u.email.toLowerCase() === data.email!.toLowerCase())) {
-      return { ok: false, error: 'Email sudah terdaftar. Silakan login.' };
+  const login = useCallback(async (email: string, password: string) => {
+    try {
+      const result = await signIn(email.trim(), password);
+      if (!result.user) return { ok: false, error: 'Login gagal: sesi pengguna tidak tersedia.' };
+      setIsGuest(false);
+      localStorage.removeItem(GUEST_KEY);
+      return { ok: true };
+    } catch (error: any) {
+      return { ok: false, error: error?.message ?? 'Email atau password tidak valid.' };
     }
-    const newUser: User = {
-      id: 'custom',
-      username: data.username || ('user' + Math.floor(Math.random() * 9999)),
-      email: data.email,
-      displayName: data.displayName || data.username || 'Pengguna Baru',
-      role: data.role || 'pelajar',
-      bio: '',
-      school: data.school,
-      educationLevel: data.educationLevel,
-      birthDate: data.birthDate,
-      profilePhoto: data.profilePhoto,
-      points: 0,
-      rank: 0,
-      joinedAt: new Date().toISOString().slice(0, 10),
-      favoriteCategories: data.favoriteCategories || [],
-      badges: [],
-      emblems: [],
-      followers: 0,
-      following: 0,
-    };
-    setCustomUser(newUser);
-    setSession({ userId: 'custom', isGuest: false, customUser: newUser });
-    return { ok: true };
+  }, []);
+
+  const register = useCallback(async (data: Partial<User> & { email: string; password: string }) => {
+    try {
+      await signUp(data.email.trim(), data.password, {
+        username: data.username ?? '',
+        full_name: data.displayName ?? '',
+        account_type: data.role === 'guru' ? 'teacher' : 'student',
+        birth_date: data.birthDate,
+        institution: data.school,
+        grade: data.educationLevel,
+      });
+      return { ok: true };
+    } catch (error: any) {
+      return { ok: false, error: error?.message ?? 'Pendaftaran gagal.' };
+    }
   }, []);
 
   const loginAsGuest = useCallback(() => {
-    setSession({ userId: null, isGuest: true, customUser: null });
-  }, []);
+    localStorage.setItem(GUEST_KEY, '1');
+    setIsGuest(true);
+    setAuthUser(null);
+    setUser(null);
+    void refresh();
+  }, [refresh]);
 
-  const logout = useCallback(() => {
-    setSession({ userId: null, isGuest: false, customUser: null });
-  }, []);
-
-  const updateProfile = useCallback((data: Partial<User>) => {
-    if (currentUser) {
-      const updated = { ...currentUser, ...data };
-      if (session.userId === 'custom') {
-        setCustomUser(updated);
-      }
+  const logout = useCallback(async () => {
+    try { await signOut(); } finally {
+      localStorage.removeItem(GUEST_KEY);
+      setAuthUser(null);
+      setUser(null);
+      setIsGuest(false);
+      void refresh();
     }
-  }, [currentUser, session.userId]);
+  }, [refresh]);
 
-  const markNotificationRead = useCallback((id: string) => {
-    setNotifications((ns) => ns.map((n) => (n.id === id ? { ...n, read: true } : n)));
-  }, []);
+  const updateProfile = useCallback(async (data: Partial<User>) => {
+    if (!authUser) return;
+    const patch: Record<string, unknown> = {};
+    if (data.username !== undefined) patch.username = data.username;
+    if (data.displayName !== undefined) patch.full_name = data.displayName;
+    if (data.bio !== undefined) patch.bio = data.bio;
+    if (data.school !== undefined) patch.institution = data.school;
+    if (data.birthDate !== undefined) patch.birth_date = data.birthDate;
+    if (data.profilePhoto !== undefined) patch.avatar_url = data.profilePhoto;
+    if (data.educationLevel !== undefined) patch.grade = data.educationLevel;
+    const fresh = await updateProfileRecord(authUser.id, patch);
+    setUser((previous) => previous ? { ...previous, ...mapProfileToUser(fresh, authUser.email) } : mapProfileToUser(fresh, authUser.email));
+  }, [authUser]);
 
-  const markAllNotificationsRead = useCallback(() => {
-    setNotifications((ns) => ns.map((n) => ({ ...n, read: true })));
-  }, []);
+  const markNotificationRead = useCallback(async (id: string) => {
+    if (!authUser) return;
+    const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', id).eq('user_id', authUser.id);
+    if (error) throw error;
+    setNotifications((items) => items.map((n) => n.id === id ? { ...n, read: true } : n));
+  }, [authUser]);
 
-  const addPoints = useCallback((points: number) => {
-    if (session.userId === 'custom' && customUser) {
-      setCustomUser({ ...customUser, points: customUser.points + points });
+  const markAllNotificationsRead = useCallback(async () => {
+    if (!authUser) return;
+    const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('user_id', authUser.id).is('read_at', null);
+    if (error) throw error;
+    setNotifications((items) => items.map((n) => ({ ...n, read: true })));
+  }, [authUser]);
+
+  const addPoints = useCallback(async (points: number) => {
+    if (!authUser || !Number.isFinite(points) || points === 0) return;
+    const { error } = await supabase.from('xp_ledger').insert({ user_id: authUser.id, event_type: 'manual', event_id: crypto.randomUUID(), amount: points, reason: 'UI action' });
+    if (error) throw error;
+    await refresh(authUser.id, authUser.email);
+  }, [authUser, refresh]);
+
+  const addNotification = useCallback(async (n: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => {
+    if (!authUser) return;
+    const { data, error } = await supabase.from('notifications').insert({ user_id: authUser.id, type: n.type, title: n.title, body: n.body, data: { link: n.link, icon: n.icon } }).select('*').single();
+    if (error) throw error;
+    setNotifications((items) => [{ id: data.id, type: data.type, title: data.title, body: data.body ?? '', createdAt: data.created_at, read: false, link: data.data?.link }, ...items]);
+  }, [authUser]);
+
+  const addOrder = useCallback((order: Order) => setOrders((items) => [order, ...items]), []);
+
+  const togglePostLike = useCallback(async (postId: string) => {
+    if (!authUser) return;
+    const { data: existing, error: lookupError } = await supabase.from('post_likes').select('post_id').eq('post_id', postId).eq('user_id', authUser.id).maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing) {
+      const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', authUser.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: authUser.id });
+      if (error) throw error;
     }
-  }, [customUser, session.userId]);
+    await refresh(authUser.id, authUser.email);
+  }, [authUser, refresh]);
 
-  const addNotification = useCallback((n: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => {
-    setNotifications((ns) => [
-      { ...n, id: 'n-' + Math.random().toString(36).slice(2), createdAt: new Date().toISOString(), read: false },
-      ...ns,
-    ]);
-  }, []);
+  const toggleCommentLike = useCallback(async (_postId: string, commentId: string) => {
+    if (!authUser) return;
+    const { data: existing, error: lookupError } = await supabase.from('comment_likes').select('comment_id').eq('comment_id', commentId).eq('user_id', authUser.id).maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing) {
+      const { error } = await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', authUser.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: authUser.id });
+      if (error) throw error;
+    }
+    await refresh(authUser.id, authUser.email);
+  }, [authUser, refresh]);
 
-  const addOrder = useCallback((order: Order) => {
-    setOrders((os) => [order, ...os]);
-  }, []);
+  const addComment = useCallback(async (postId: string, body: string, parentId?: string) => {
+    if (!authUser || !body.trim()) return;
+    const { error } = await supabase.from('comments').insert({ post_id: postId, user_id: authUser.id, parent_id: parentId ?? null, body: body.trim() });
+    if (error) throw error;
+    await refresh(authUser.id, authUser.email);
+  }, [authUser, refresh]);
 
-  const togglePostLike = useCallback((postId: string) => {
-    setFeed((posts) => posts.map((p) => p.id === postId ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p));
-  }, []);
-
-  const toggleCommentLike = useCallback((postId: string, commentId: string, replyId?: string) => {
-    setFeed((posts) => posts.map((p) => {
-      if (p.id !== postId) return p;
-      const mapComment = (c: Comment): Comment => {
-        if (replyId) {
-          return {
-            ...c,
-            replies: c.replies.map((r) => r.id === replyId ? { ...r, liked: !r.liked, likes: r.liked ? r.likes - 1 : r.likes + 1 } : r),
-          };
-        }
-        return c.id === commentId ? { ...c, liked: !c.liked, likes: c.liked ? c.likes - 1 : c.likes + 1 } : c;
-      };
-      return { ...p, comments: p.comments.map(mapComment) };
-    }));
-  }, []);
-
-  const addComment = useCallback((postId: string, body: string, parentId?: string) => {
-    const u = currentUser;
-    if (!u || !body.trim()) return;
-    const showcase = u.showcaseEmblems && u.showcaseEmblems.length > 0
-      ? u.showcaseEmblems.slice(0, 3)
-      : u.emblems.slice(0, 3).map((e) => e.id);
-    const newComment: Comment = {
-      id: 'cm-' + Math.random().toString(36).slice(2),
-      postId,
-      userId: u.id,
-      authorName: u.displayName,
-      authorUsername: u.username,
-      authorId: u.id,
-      authorEmblems: showcase,
-      body: body.trim(),
-      createdAt: new Date().toISOString(),
-      likes: 0,
-      liked: false,
-      replies: [],
-    };
-    setFeed((posts) => posts.map((p) => {
-      if (p.id !== postId) return p;
-      if (parentId) {
-        return {
-          ...p,
-          comments: p.comments.map((c) => c.id === parentId ? { ...c, replies: [...c.replies, newComment] } : c),
-        };
-      }
-      return { ...p, comments: [...p.comments, newComment] };
-    }));
-  }, [currentUser]);
-
-  const value: AppState = {
-    user: currentUser,
-    isAuthenticated: !!currentUser,
-    isGuest: session.isGuest,
+  const value = useMemo<AppState>(() => ({
+    user,
+    isAuthenticated: !!authUser,
+    isGuest,
     notifications,
     awards,
     certificates,
@@ -227,35 +269,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toggleCommentLike,
     addComment,
     toast,
-  };
+  }), [user, authUser, isGuest, notifications, awards, certificates, orders, feed, login, register, loginAsGuest, logout, updateProfile, markNotificationRead, markAllNotificationsRead, addPoints, addNotification, addOrder, togglePostLike, toggleCommentLike, addComment, toast]);
 
   return (
     <AppContext.Provider value={value}>
       {children}
-      <ToastViewport toasts={toasts} />
+      <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none">
+        {toasts.map((t) => <div key={t.id} className={`pointer-events-auto px-4 py-3 rounded-xl shadow-pop text-sm font-medium animate-slide-up flex items-center gap-2 ${t.type === 'success' ? 'bg-moss-600 text-white' : t.type === 'error' ? 'bg-err text-white' : 'bg-ink-700 text-white'}`}><span className="w-1.5 h-1.5 rounded-full bg-white/80" />{t.message}</div>)}
+      </div>
     </AppContext.Provider>
-  );
-}
-
-function ToastViewport({ toasts }: { toasts: { id: string; message: string; type: 'success' | 'error' | 'info' }[] }) {
-  return (
-    <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`pointer-events-auto px-4 py-3 rounded-xl shadow-pop text-sm font-medium animate-slide-up flex items-center gap-2 ${
-            t.type === 'success'
-              ? 'bg-moss-600 text-white'
-              : t.type === 'error'
-                ? 'bg-err text-white'
-                : 'bg-ink-700 text-white'
-          }`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
-          {t.message}
-        </div>
-      ))}
-    </div>
   );
 }
 
