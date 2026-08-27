@@ -39,6 +39,12 @@ jobs:
           VITE_CLOUDINARY_CLOUD_NAME: sykabelajar
           VITE_CLOUDINARY_UPLOAD_PRESET: sykabelajar_preset
 
+      - name: Live production smoke test
+        run: node scripts/rpd-smoke.mjs
+        env:
+          VITE_SUPABASE_URL: https://jrfogwueytiddnanetth.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
       - name: Publish dist to gh-pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
