@@ -43,7 +43,7 @@ export function onAuthStateChange(callback: Parameters<typeof supabase.auth.onAu
   return supabase.auth.onAuthStateChange(callback);
 }
 
-export async function resetPassword(email: string, redirectTo = `${window.location.origin}/login`) {
+export async function resetPassword(email: string, redirectTo = `${window.location.origin}/#/login`) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
   if (error) throw error;
 }
