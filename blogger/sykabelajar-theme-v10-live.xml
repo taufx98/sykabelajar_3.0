@@ -30,7 +30,7 @@
   <script type='text/javascript'>
     //<![CDATA[
     window.SYKA_BLOGGER_CONFIG = {
-      appBase: 'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar_3.0@feature/rpd-v4.1-live-backend',
+      appBase: 'https://cdn.jsdelivr.net/gh/taufx98/sykabelajar_3.0@gh-pages',
       supabaseUrl: 'https://jrfogwueytiddnanetth.supabase.co',
       cloudinaryCloudName: 'sykabelajar',
       cloudinaryUploadPreset: 'sykabelajar_preset'
@@ -59,11 +59,11 @@
         });
       }
       Promise.all([
-        loadCss(window.SYKA_BLOGGER_CONFIG.appBase+'/dist/styles.min.css?v=10'),
-        loadJs(window.SYKA_BLOGGER_CONFIG.appBase+'/dist/app.js?v=10')
+        loadCss(window.SYKA_BLOGGER_CONFIG.appBase+'/styles.min.css?v=11'),
+        loadJs(window.SYKA_BLOGGER_CONFIG.appBase+'/app.js?v=11')
       ]).catch(function(error){
         console.error('[SykaBelajar] runtime load failed',error);
-        root.innerHTML='<div class="blogger-noscript"><strong>SykaBelajar sedang memuat ulang.</strong><br/>Bundle aplikasi belum berhasil dimuat. Periksa deployment branch dan refresh halaman.</div>';
+        root.innerHTML='<div class="blogger-noscript"><strong>SykaBelajar sedang memuat ulang.</strong><br/>Bundle aplikasi belum berhasil dimuat. Deployment bundle belum tersedia atau gagal dimuat.</div>';
       });
     })();
     //]]>
