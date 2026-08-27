@@ -211,7 +211,7 @@ function NewOrderModal({ open, prefill, onClose, onCreate }: {
   const CATEGORY_ICON: Record<string, React.ReactNode> = {
     sertifikat: <CheckCircle2 size={18} className="text-moss-400" />,
     medali: <Package size={18} className="text-amber-400" />,
-    emblem: <Award as AwardIcon size={18} className="text-sky-400" />,
+    emblem: <AwardIcon size={18} className="text-sky-400" />,
   };
 
   return (

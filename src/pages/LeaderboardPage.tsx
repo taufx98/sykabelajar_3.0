@@ -108,6 +108,12 @@ export function LeaderboardPage() {
   );
 }
 
+function getLevelForGrade(grade: number): EducationLevel {
+  if (grade >= 4 && grade <= 6) return 'sd';
+  if (grade >= 7 && grade <= 9) return 'smp';
+  return 'sma';
+}
+
 function buildTabs(current: TabValue): { label: string; value: TabValue }[] {
   const base: { label: string; value: TabValue }[] = [
     { label: 'Global', value: 'global' },
@@ -118,7 +124,9 @@ function buildTabs(current: TabValue): { label: string; value: TabValue }[] {
 
   if (current === 'global') return base;
 
-  const level = current as EducationLevel;
+  const level: EducationLevel = current.startsWith('grade-')
+    ? getLevelForGrade(Number(current.replace('grade-', '')))
+    : current as EducationLevel;
   const grades = LEVEL_GRADES[level];
   const gradeTabs = grades.map((g) => ({ label: GRADE_LABEL[g], value: `grade-${g}` as TabValue }));
 
