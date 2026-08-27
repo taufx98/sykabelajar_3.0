@@ -12,46 +12,21 @@ export interface CloudinaryUploadResult {
 export async function uploadImage(file: File, folder?: string): Promise<CloudinaryUploadResult> {
   if (!file.type.startsWith('image/')) throw new Error('File harus berupa gambar');
   if (file.size > 5 * 1024 * 1024) throw new Error('Ukuran gambar maksimal 5MB');
-
   if (folder?.includes('/profiles/') || folder?.includes('/covers/')) {
     const kind = folder.includes('/covers/') ? 'cover' : 'profile';
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('kind', kind);
+    const formData = new FormData(); formData.append('file', file); formData.append('kind', kind);
     const { data, error } = await supabase.functions.invoke('cloudinary-profile-upload-v2', { body: formData });
     if (error) throw error;
     const result = data as CloudinaryUploadResult & { error?: string };
     if (!result?.secure_url || !result?.public_id) throw new Error(result?.error || 'Cloudinary profile upload gagal.');
     return result;
   }
-
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET ?? '');
-  if (folder) formData.append('folder', folder);
-  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME ?? '';
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
+  const formData = new FormData(); formData.append('file', file); formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET ?? ''); if (folder) formData.append('folder', folder);
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME ?? ''; const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
   if (!response.ok) throw new Error(`Cloudinary upload gagal (${response.status})`);
   return response.json() as Promise<CloudinaryUploadResult>;
 }
 
-export async function uploadProfileImage(file: File, kind: 'profile' | 'cover'): Promise<CloudinaryUploadResult> {
-  return uploadImage(file, kind === 'cover' ? 'sykabelajar/users/covers/' : 'sykabelajar/users/profiles/');
-}
-
-export function versionedCloudinaryUrl(url?: string | null, version?: string | number | null): string | undefined {
-  if (!url) return undefined;
-  if (!version) return url;
-  const base = String(url).split('?')[0];
-  return `${base}?v=${encodeURIComponent(String(version))}`;
-}
-
-export async function deleteImage(publicId: string, resourceType = 'image'): Promise<boolean> {
-  if (!publicId) return false;
-  const { error } = await supabase.functions.invoke('cloudinary-delete-asset-v2', { body: { public_id: publicId, resource_type: resourceType, invalidate: true } });
-  if (error) {
-    console.warn('[SykaBelajar] Cloudinary delete skipped', error.message);
-    return false;
-  }
-  return true;
-}
+export async function uploadProfileImage(file: File, kind: 'profile' | 'cover'): Promise<CloudinaryUploadResult> { return uploadImage(file, kind === 'cover' ? 'sykabelajar/users/covers/' : 'sykabelajar/users/profiles/'); }
+export function versionedCloudinaryUrl(url?: string | null, version?: string | number | null): string | undefined { if (!url) return undefined; if (!version) return url; return `${String(url).split('?')[0]}?v=${encodeURIComponent(String(version))}`; }
+export async function deleteImage(publicId: string, resourceType = 'image'): Promise<boolean> { if (!publicId) return false; const { error } = await supabase.functions.invoke('cloudinary-delete-profile', { body: { public_id: publicId, resource_type: resourceType } }); if (error) { console.warn('[SykaBelajar] Cloudinary delete skipped', error.message); return false; } return true; }
