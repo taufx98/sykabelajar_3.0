@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { User, AppNotification, Order, Award, Certificate, FeedPost } from '@/types';
+import type { Role, User, AppNotification, Order, Award, Certificate, FeedPost } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { signIn, signUp, signOut } from '@/services/auth.service';
 import { getProfileById, updateProfile as updateProfileRecord } from '@/services/profile.service';
 import { hydrateRuntime, mapProfileToUser, resetRuntimeCollections } from '@/services/runtime.service';
 import { demoAwards, demoCertificates, demoFeed, demoNotifications, demoOrders, demoLeaderboard } from '@/data/live';
+import { backendRoleToUiRole, getUserRoles, hasAllowedLoginRole, uiRoleToAccountType } from '@/services/role.service';
 
 interface AppState {
   user: User | null;
@@ -15,7 +16,7 @@ interface AppState {
   certificates: Certificate[];
   orders: Order[];
   feed: FeedPost[];
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  login: (email: string, password: string, requestedRole?: Exclude<Role, 'admin'>) => Promise<{ ok: boolean; error?: string }>;
   register: (data: Partial<User> & { email: string; password: string }) => Promise<{ ok: boolean; error?: string }>;
   loginAsGuest: () => void;
   logout: () => Promise<void>;
@@ -48,6 +49,13 @@ function publishRuntimeState(setters: {
   setters.setFeed([...demoFeed]);
 }
 
+function preferredRole(roles: Awaited<ReturnType<typeof getUserRoles>>): Role {
+  if (roles.includes('admin')) return 'admin';
+  if (roles.includes('organizer_member')) return 'penyelenggara';
+  if (roles.includes('teacher')) return 'guru';
+  return 'pelajar';
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<{ id: string; email?: string } | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -72,7 +80,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (profile) {
           const mapped = mapProfileToUser(profile, email);
           const leaderboardEntry = demoLeaderboard.find((entry) => entry.userId === userId);
-          setUser({ ...mapped, points: leaderboardEntry?.points ?? mapped.points, rank: leaderboardEntry?.rank ?? mapped.rank });
+          let role = mapped.role;
+          try {
+            role = preferredRole(await getUserRoles(userId));
+          } catch (roleError) {
+            console.warn('[SykaBelajar] role lookup failed', roleError);
+          }
+          setUser({ ...mapped, role, points: leaderboardEntry?.points ?? mapped.points, rank: leaderboardEntry?.rank ?? mapped.rank });
         }
       }
     } catch (error) {
@@ -135,10 +149,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     window.setTimeout(() => setToasts((items) => items.filter((x) => x.id !== id)), 3500);
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string, requestedRole: Exclude<Role, 'admin'> = 'pelajar') => {
     try {
       const result = await signIn(email.trim(), password);
       if (!result.user) return { ok: false, error: 'Login gagal: sesi pengguna tidak tersedia.' };
+      const roles = await getUserRoles(result.user.id);
+      if (!roles.length) {
+        await signOut();
+        return { ok: false, error: 'Akun belum memiliki role aktif di backend.' };
+      }
+      if (!hasAllowedLoginRole(roles, requestedRole)) {
+        await signOut();
+        const roleNames = roles.map((role) => backendRoleToUiRole(role)).join(', ');
+        return { ok: false, error: `Role akun adalah ${roleNames}. Pilih jenis akun yang sesuai.` };
+      }
       setAuthUser({ id: result.user.id, email: result.user.email ?? undefined });
       setIsGuest(false);
       localStorage.removeItem(GUEST_KEY);
@@ -151,10 +175,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(async (data: Partial<User> & { email: string; password: string }) => {
     try {
+      const requestedRole = data.role === 'guru' || data.role === 'penyelenggara' ? data.role : 'pelajar';
       await signUp(data.email.trim(), data.password, {
         username: data.username ?? '',
         full_name: data.displayName ?? '',
-        account_type: data.role === 'guru' ? 'teacher' : 'student',
+        account_type: uiRoleToAccountType(requestedRole),
         birth_date: data.birthDate,
         institution: data.school,
         grade: data.educationLevel,
@@ -201,7 +226,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.educationLevel !== undefined) patch.grade = data.educationLevel;
     const fresh = await updateProfileRecord(authUser.id, patch);
     const mapped = mapProfileToUser(fresh, authUser.email);
-    setUser((current) => current ? { ...current, ...mapped } : mapped);
+    let role = mapped.role;
+    try { role = preferredRole(await getUserRoles(authUser.id)); } catch { /* keep profile-derived role */ }
+    setUser((current) => current ? { ...current, ...mapped, role } : { ...mapped, role });
   }, [authUser]);
 
   const markNotificationRead = useCallback(async (id: string) => {
