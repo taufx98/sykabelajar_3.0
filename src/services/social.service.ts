@@ -10,141 +10,27 @@ export interface SocialPost {
   body: string;
   cover_url: string | null;
   created_at: string;
+  competition_id: string | null;
+  competition_slug: string | null;
   likes: number;
   liked: boolean;
   comments: number;
 }
-
-export interface SocialComment {
-  id: string;
-  postId: string;
-  userId: string;
-  authorName: string;
-  authorUsername: string;
-  authorId: string;
-  body: string;
-  createdAt: string;
-  likes: number;
-  liked: boolean;
-  parentId: string | null;
+export interface SocialComment { id:string; postId:string; userId:string; authorName:string; authorUsername:string; authorId:string; body:string; createdAt:string; likes:number; liked:boolean; parentId:string|null; }
+async function currentUserId(){const{data}=await supabase.auth.getUser();return data.user?.id??null;}
+export async function listPublishedPosts(limit=30):Promise<SocialPost[]>{
+ const {data:posts,error}=await supabase.from('posts').select('id,author_user_id,title,body,cover_url,created_at,competition_id').eq('status','PUBLISHED').order('created_at',{ascending:false}).limit(limit); if(error)throw error;
+ const rows=(posts??[]) as Array<Record<string,unknown>>; const ids=rows.map(p=>String(p.id)); const userIds=[...new Set(rows.map(p=>String(p.author_user_id)))]; const compIds=[...new Set(rows.map(p=>p.competition_id).filter(Boolean).map(String))]; const userId=await currentUserId();
+ const [{data:profiles},{data:likes},{data:comments},{data:competitions}]=await Promise.all([
+  userIds.length?supabase.from('public_profiles').select('id,username,full_name,avatar_url').in('id',userIds):Promise.resolve({data:[] as any[]}),
+  ids.length?supabase.from('post_likes').select('post_id,user_id').in('post_id',ids):Promise.resolve({data:[] as any[]}),
+  ids.length?supabase.from('comments').select('post_id').in('post_id',ids).eq('moderation_state','VISIBLE'):Promise.resolve({data:[] as any[]}),
+  compIds.length?supabase.from('competitions').select('id,slug').in('id',compIds):Promise.resolve({data:[] as any[]}),
+ ]);
+ const profileMap=new Map((profiles??[]).map((p:any)=>[String(p.id),p])); const compMap=new Map((competitions??[]).map((c:any)=>[String(c.id),c])); const likeRows=(likes??[]) as Array<Record<string,unknown>>; const commentRows=(comments??[]) as Array<Record<string,unknown>>;
+ return rows.map(p=>{const id=String(p.id);const author=profileMap.get(String(p.author_user_id)) as any;const comp=p.competition_id?compMap.get(String(p.competition_id)) as any:null;return{id,author_user_id:String(p.author_user_id),author_name:String(author?.full_name??author?.username??'Pengguna'),author_username:String(author?.username??''),avatar_url:author?.avatar_url??null,title:String(p.title??''),body:String(p.body??''),cover_url:p.cover_url==null?null:String(p.cover_url),created_at:String(p.created_at),competition_id:p.competition_id?String(p.competition_id):null,competition_slug:comp?.slug?String(comp.slug):null,likes:likeRows.filter(l=>String(l.post_id)===id).length,liked:!!userId&&likeRows.some(l=>String(l.post_id)===id&&String(l.user_id)===userId),comments:commentRows.filter(c=>String(c.post_id)===id).length};});
 }
-
-async function currentUserId() {
-  const { data } = await supabase.auth.getUser();
-  return data.user?.id ?? null;
-}
-
-export async function listPublishedPosts(limit = 30): Promise<SocialPost[]> {
-  const { data: posts, error } = await supabase
-    .from('posts')
-    .select('id,author_user_id,title,body,cover_url,created_at')
-    .eq('status', 'PUBLISHED')
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  const rows = (posts ?? []) as Array<Record<string, unknown>>;
-  const ids = rows.map((p) => String(p.id));
-  const userIds = [...new Set(rows.map((p) => String(p.author_user_id)))];
-  const userId = await currentUserId();
-  const [{ data: profiles }, { data: likes }, { data: comments }] = await Promise.all([
-    userIds.length ? supabase.from('public_profiles').select('id,username,full_name,avatar_url').in('id', userIds) : Promise.resolve({ data: [] as any[] }),
-    ids.length ? supabase.from('post_likes').select('post_id,user_id').in('post_id', ids) : Promise.resolve({ data: [] as any[] }),
-    ids.length ? supabase.from('comments').select('post_id').in('post_id', ids).eq('moderation_state', 'VISIBLE') : Promise.resolve({ data: [] as any[] }),
-  ]);
-  const profileMap = new Map((profiles ?? []).map((p: any) => [String(p.id), p]));
-  const likeRows = (likes ?? []) as Array<Record<string, unknown>>;
-  const commentRows = (comments ?? []) as Array<Record<string, unknown>>;
-  return rows.map((p) => {
-    const id = String(p.id);
-    const author = profileMap.get(String(p.author_user_id)) as any;
-    return {
-      id,
-      author_user_id: String(p.author_user_id),
-      author_name: String(author?.full_name ?? author?.username ?? 'Pengguna'),
-      author_username: String(author?.username ?? ''),
-      avatar_url: author?.avatar_url ?? null,
-      title: String(p.title ?? ''),
-      body: String(p.body ?? ''),
-      cover_url: p.cover_url == null ? null : String(p.cover_url),
-      created_at: String(p.created_at),
-      likes: likeRows.filter((l) => String(l.post_id) === id).length,
-      liked: !!userId && likeRows.some((l) => String(l.post_id) === id && String(l.user_id) === userId),
-      comments: commentRows.filter((c) => String(c.post_id) === id).length,
-    };
-  });
-}
-
-export async function listPostComments(postId: string): Promise<SocialComment[]> {
-  const { data, error } = await supabase
-    .from('comments')
-    .select('id,post_id,user_id,parent_id,body,created_at')
-    .eq('post_id', postId)
-    .eq('moderation_state', 'VISIBLE')
-    .order('created_at', { ascending: true });
-  if (error) throw error;
-  const rows = (data ?? []) as Array<Record<string, unknown>>;
-  const userIds = [...new Set(rows.map((row) => String(row.user_id)))];
-  const ids = rows.map((row) => String(row.id));
-  const currentId = await currentUserId();
-  const [{ data: profiles }, { data: likes }] = await Promise.all([
-    userIds.length ? supabase.from('public_profiles').select('id,username,full_name').in('id', userIds) : Promise.resolve({ data: [] as any[] }),
-    ids.length ? supabase.from('comment_likes').select('comment_id,user_id').in('comment_id', ids) : Promise.resolve({ data: [] as any[] }),
-  ]);
-  const profileMap = new Map((profiles ?? []).map((p: any) => [String(p.id), p]));
-  const likeRows = (likes ?? []) as Array<Record<string, unknown>>;
-  return rows.map((row) => {
-    const userId = String(row.user_id);
-    const profile = profileMap.get(userId) as any;
-    const id = String(row.id);
-    return {
-      id,
-      postId,
-      userId,
-      authorName: String(profile?.full_name ?? profile?.username ?? 'Pengguna'),
-      authorUsername: String(profile?.username ?? ''),
-      authorId: userId,
-      body: String(row.body ?? ''),
-      createdAt: String(row.created_at),
-      likes: likeRows.filter((like) => String(like.comment_id) === id).length,
-      liked: !!currentId && likeRows.some((like) => String(like.comment_id) === id && String(like.user_id) === currentId),
-      parentId: row.parent_id ? String(row.parent_id) : null,
-    };
-  });
-}
-
-export async function togglePostLike(postId: string) {
-  const userId = await currentUserId();
-  if (!userId) throw new Error('LOGIN_REQUIRED');
-  const { data: existing, error: lookupError } = await supabase.from('post_likes').select('post_id').eq('post_id', postId).eq('user_id', userId).maybeSingle();
-  if (lookupError) throw lookupError;
-  if (existing) {
-    const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', userId);
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: userId });
-    if (error) throw error;
-  }
-}
-
-export async function toggleCommentLike(commentId: string) {
-  const userId = await currentUserId();
-  if (!userId) throw new Error('LOGIN_REQUIRED');
-  const { data: existing, error: lookupError } = await supabase.from('comment_likes').select('comment_id').eq('comment_id', commentId).eq('user_id', userId).maybeSingle();
-  if (lookupError) throw lookupError;
-  if (existing) {
-    const { error } = await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', userId);
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: userId });
-    if (error) throw error;
-  }
-}
-
-export async function addPostComment(postId: string, body: string, parentId?: string) {
-  const userId = await currentUserId();
-  if (!userId) throw new Error('LOGIN_REQUIRED');
-  const text = body.trim();
-  if (!text) throw new Error('Komentar tidak boleh kosong.');
-  const { error } = await supabase.from('comments').insert({ post_id: postId, user_id: userId, parent_id: parentId ?? null, body: text, moderation_state: 'VISIBLE' });
-  if (error) throw error;
-}
+export async function listPostComments(postId:string):Promise<SocialComment[]>{const{data,error}=await supabase.from('comments').select('id,post_id,user_id,parent_id,body,created_at').eq('post_id',postId).eq('moderation_state','VISIBLE').order('created_at',{ascending:true});if(error)throw error;const rows=(data??[]) as Array<Record<string,unknown>>;const userIds=[...new Set(rows.map(r=>String(r.user_id)))];const ids=rows.map(r=>String(r.id));const currentId=await currentUserId();const[{data:profiles},{data:likes}]=await Promise.all([userIds.length?supabase.from('public_profiles').select('id,username,full_name').in('id',userIds):Promise.resolve({data:[] as any[]}),ids.length?supabase.from('comment_likes').select('comment_id,user_id').in('comment_id',ids):Promise.resolve({data:[] as any[]})]);const profileMap=new Map((profiles??[]).map((p:any)=>[String(p.id),p]));const likeRows=(likes??[]) as Array<Record<string,unknown>>;return rows.map(r=>{const userId=String(r.user_id),id=String(r.id),profile=profileMap.get(userId) as any;return{id,postId,userId,authorName:String(profile?.full_name??profile?.username??'Pengguna'),authorUsername:String(profile?.username??''),authorId:userId,body:String(r.body??''),createdAt:String(r.created_at),likes:likeRows.filter(l=>String(l.comment_id)===id).length,liked:!!currentId&&likeRows.some(l=>String(l.comment_id)===id&&String(l.user_id)===currentId),parentId:r.parent_id?String(r.parent_id):null};});}
+export async function togglePostLike(postId:string){const userId=await currentUserId();if(!userId)throw new Error('LOGIN_REQUIRED');const{data:existing,error:lookupError}=await supabase.from('post_likes').select('post_id').eq('post_id',postId).eq('user_id',userId).maybeSingle();if(lookupError)throw lookupError;if(existing){const{error}=await supabase.from('post_likes').delete().eq('post_id',postId).eq('user_id',userId);if(error)throw error;}else{const{error}=await supabase.from('post_likes').insert({post_id:postId,user_id:userId});if(error)throw error;}}
+export async function toggleCommentLike(commentId:string){const userId=await currentUserId();if(!userId)throw new Error('LOGIN_REQUIRED');const{data:existing,error:lookupError}=await supabase.from('comment_likes').select('comment_id').eq('comment_id',commentId).eq('user_id',userId).maybeSingle();if(lookupError)throw lookupError;if(existing){const{error}=await supabase.from('comment_likes').delete().eq('comment_id',commentId).eq('user_id',userId);if(error)throw error;}else{const{error}=await supabase.from('comment_likes').insert({comment_id:commentId,user_id:userId});if(error)throw error;}}
+export async function addPostComment(postId:string,body:string,parentId?:string){const userId=await currentUserId();if(!userId)throw new Error('LOGIN_REQUIRED');const text=body.trim();if(!text)throw new Error('Komentar tidak boleh kosong.');const{error}=await supabase.from('comments').insert({post_id:postId,user_id:userId,parent_id:parentId??null,body:text,moderation_state:'VISIBLE'});if(error)throw error;}
