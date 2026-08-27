@@ -31,21 +31,26 @@ export async function listQuestions(questionBankId: string) {
   return data ?? [];
 }
 
-export async function saveQuestion(input: { id?: string; questionBankId: string; type: string; prompt: string; points?: number; required?: boolean; displayOrder?: number; status?: string; config?: Record<string, unknown> }) {
-  const payload = {
-    question_bank_id: input.questionBankId,
-    type: input.type,
-    prompt: input.prompt,
-    points: input.points ?? 1,
-    required: input.required ?? true,
-    display_order: input.displayOrder ?? 0,
-    status: input.status ?? 'DRAFT',
-    config: input.config ?? {},
-  };
-  const query = input.id
-    ? supabase.from('questions').update(payload).eq('id', input.id).select('*').single()
-    : supabase.from('questions').insert(payload).select('*').single();
-  const { data, error } = await query;
+export async function listQuestionOptions(questionIds: string[]) {
+  if (!questionIds.length) return [];
+  const { data, error } = await supabase.from('question_options').select('id,question_id,label,value,is_correct,display_order').in('question_id', questionIds).order('display_order', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function saveQuestion(input: { id?: string; questionBankId: string; type: string; prompt: string; points?: number; required?: boolean; displayOrder?: number; status?: string; config?: Record<string, unknown>; options?: Array<{ label: string; value?: string; is_correct?: boolean; display_order?: number }> }) {
+  const { data, error } = await supabase.rpc('save_question_with_options', {
+    p_question_id: input.id ?? null,
+    p_question_bank_id: input.questionBankId,
+    p_type: input.type,
+    p_prompt: input.prompt,
+    p_points: input.points ?? 1,
+    p_required: input.required ?? true,
+    p_display_order: input.displayOrder ?? 0,
+    p_status: input.status ?? 'DRAFT',
+    p_config: input.config ?? {},
+    p_options: input.options ?? [],
+  });
   if (error) throw error;
   return data;
 }
@@ -53,4 +58,10 @@ export async function saveQuestion(input: { id?: string; questionBankId: string;
 export async function deleteQuestion(id: string) {
   const { error } = await supabase.from('questions').delete().eq('id', id);
   if (error) throw error;
+}
+
+export async function gradeAttempt(attemptId: string) {
+  const { data, error } = await supabase.rpc('grade_competition_attempt', { p_attempt_id: attemptId });
+  if (error) throw error;
+  return data;
 }
