@@ -51,3 +51,42 @@ export async function createProductOrder(productId: string, quantity: number) {
   if (error) throw error;
   return Array.isArray(data) ? data[0] : data;
 }
+
+export async function createProductOrderWithProof(input: {
+  productId: string;
+  quantity: number;
+  whatsapp: string;
+  paymentMethod: string;
+  proofUrl: string;
+  proofPublicId?: string;
+  proofWidth?: number;
+  proofHeight?: number;
+  proofVersion?: string;
+  proofResourceType?: string;
+}) {
+  if (!Number.isInteger(input.quantity) || input.quantity < 1) throw new Error('Jumlah produk tidak valid.');
+  const { data, error } = await supabase.rpc('create_product_order_with_proof', {
+    p_product_id: input.productId,
+    p_quantity: input.quantity,
+    p_whatsapp: input.whatsapp.trim(),
+    p_payment_method: input.paymentMethod,
+    p_proof_url: input.proofUrl,
+    p_proof_public_id: input.proofPublicId ?? null,
+    p_proof_width: input.proofWidth ?? null,
+    p_proof_height: input.proofHeight ?? null,
+    p_proof_version: input.proofVersion ?? null,
+    p_proof_resource_type: input.proofResourceType ?? null,
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] : data;
+}
+
+export async function adminReviewManualOrder(orderId: string, decision: 'APPROVE' | 'REJECT', reason = '') {
+  const { data, error } = await supabase.rpc('admin_review_manual_order', {
+    p_order_id: orderId,
+    p_decision: decision,
+    p_reason: reason.trim() || null,
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] : data;
+}
