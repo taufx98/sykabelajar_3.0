@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { signIn, signUp, signOut } from '@/services/auth.service';
 import { getProfileById, updateProfile as updateProfileRecord } from '@/services/profile.service';
 import { hydrateRuntime, mapProfileToUser } from '@/services/runtime.service';
-import { demoAwards, demoCertificates, demoCompetitions, demoDailyTasks, demoFeed, demoLeaderboard, demoNotifications, demoOrders, demoUsers } from '@/data/live';
+import { demoAwards, demoCertificates, demoFeed, demoNotifications, demoOrders, demoUsers } from '@/data/live';
 
 interface AppState {
   user: User | null;
@@ -61,12 +61,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async (userId?: string, email?: string) => {
     try {
-      const profile = userId ? await getProfileById(userId) : null;
-      if (profile) setUser({ ...mapProfileToUser(profile, email), points: (demoUsers.find((x) => x.id === userId)?.points ?? 0) });
       await hydrateRuntime(userId);
       if (userId) {
         const fresh = await getProfileById(userId);
-        if (fresh) setUser((previous) => previous ? { ...previous, ...mapProfileToUser(fresh, email) } : mapProfileToUser(fresh, email));
+        if (fresh) {
+          const liveEntry = demoUsers.find((item) => item.id === userId);
+          const mapped = mapProfileToUser(fresh, email);
+          setUser({ ...mapped, points: liveEntry?.points ?? mapped.points, rank: liveEntry?.rank ?? mapped.rank });
+        }
       } else {
         setUser(null);
       }
@@ -88,9 +90,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setIsGuest(false);
         localStorage.removeItem(GUEST_KEY);
         await refresh(data.session.user.id, data.session.user.email);
-      } else if (isGuest) {
-        await refresh();
       } else {
+        setAuthUser(null);
         await refresh();
       }
     });
@@ -109,10 +110,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => {
-      alive = false;
-      subscription.subscription.unsubscribe();
-    };
+    return () => { alive = false; subscription.subscription.unsubscribe(); };
   }, [refresh, isGuest]);
 
   const toast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -136,12 +134,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const register = useCallback(async (data: Partial<User> & { email: string; password: string }) => {
     try {
       await signUp(data.email.trim(), data.password, {
-        username: data.username ?? '',
-        full_name: data.displayName ?? '',
-        account_type: data.role === 'guru' ? 'teacher' : 'student',
-        birth_date: data.birthDate,
-        institution: data.school,
-        grade: data.educationLevel,
+        username: data.username ?? '', full_name: data.displayName ?? '', account_type: data.role === 'guru' ? 'teacher' : 'student',
+        birth_date: data.birthDate, institution: data.school, grade: data.educationLevel,
       });
       return { ok: true };
     } catch (error: any) {
@@ -150,20 +144,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loginAsGuest = useCallback(() => {
-    localStorage.setItem(GUEST_KEY, '1');
-    setIsGuest(true);
-    setAuthUser(null);
-    setUser(null);
-    void refresh();
+    localStorage.setItem(GUEST_KEY, '1'); setIsGuest(true); setAuthUser(null); setUser(null); void refresh();
   }, [refresh]);
 
   const logout = useCallback(async () => {
     try { await signOut(); } finally {
-      localStorage.removeItem(GUEST_KEY);
-      setAuthUser(null);
-      setUser(null);
-      setIsGuest(false);
-      void refresh();
+      localStorage.removeItem(GUEST_KEY); setAuthUser(null); setUser(null); setIsGuest(false); void refresh();
     }
   }, [refresh]);
 
@@ -178,7 +164,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.profilePhoto !== undefined) patch.avatar_url = data.profilePhoto;
     if (data.educationLevel !== undefined) patch.grade = data.educationLevel;
     const fresh = await updateProfileRecord(authUser.id, patch);
-    setUser((previous) => previous ? { ...previous, ...mapProfileToUser(fresh, authUser.email) } : mapProfileToUser(fresh, authUser.email));
+    const liveEntry = demoUsers.find((item) => item.id === authUser.id);
+    const mapped = mapProfileToUser(fresh, authUser.email);
+    setUser({ ...mapped, points: liveEntry?.points ?? mapped.points, rank: liveEntry?.rank ?? mapped.rank });
   }, [authUser]);
 
   const markNotificationRead = useCallback(async (id: string) => {
@@ -195,12 +183,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setNotifications((items) => items.map((n) => ({ ...n, read: true })));
   }, [authUser]);
 
-  const addPoints = useCallback(async (points: number) => {
-    if (!authUser || !Number.isFinite(points) || points === 0) return;
-    const { error } = await supabase.from('xp_ledger').insert({ user_id: authUser.id, event_type: 'manual', event_id: crypto.randomUUID(), amount: points, reason: 'UI action' });
-    if (error) throw error;
-    await refresh(authUser.id, authUser.email);
-  }, [authUser, refresh]);
+  const addPoints = useCallback(async (_points: number) => {
+    throw new Error('XP hanya boleh diberikan oleh backend/server-authoritative workflows.');
+  }, []);
 
   const addNotification = useCallback(async (n: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => {
     if (!authUser) return;
@@ -216,11 +201,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: existing, error: lookupError } = await supabase.from('post_likes').select('post_id').eq('post_id', postId).eq('user_id', authUser.id).maybeSingle();
     if (lookupError) throw lookupError;
     if (existing) {
-      const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', authUser.id);
-      if (error) throw error;
+      const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', authUser.id); if (error) throw error;
     } else {
-      const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: authUser.id });
-      if (error) throw error;
+      const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: authUser.id }); if (error) throw error;
     }
     await refresh(authUser.id, authUser.email);
   }, [authUser, refresh]);
@@ -230,11 +213,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: existing, error: lookupError } = await supabase.from('comment_likes').select('comment_id').eq('comment_id', commentId).eq('user_id', authUser.id).maybeSingle();
     if (lookupError) throw lookupError;
     if (existing) {
-      const { error } = await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', authUser.id);
-      if (error) throw error;
+      const { error } = await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', authUser.id); if (error) throw error;
     } else {
-      const { error } = await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: authUser.id });
-      if (error) throw error;
+      const { error } = await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: authUser.id }); if (error) throw error;
     }
     await refresh(authUser.id, authUser.email);
   }, [authUser, refresh]);
@@ -246,30 +227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await refresh(authUser.id, authUser.email);
   }, [authUser, refresh]);
 
-  const value = useMemo<AppState>(() => ({
-    user,
-    isAuthenticated: !!authUser,
-    isGuest,
-    notifications,
-    awards,
-    certificates,
-    orders,
-    feed,
-    login,
-    register,
-    loginAsGuest,
-    logout,
-    updateProfile,
-    markNotificationRead,
-    markAllNotificationsRead,
-    addPoints,
-    addNotification,
-    addOrder,
-    togglePostLike,
-    toggleCommentLike,
-    addComment,
-    toast,
-  }), [user, authUser, isGuest, notifications, awards, certificates, orders, feed, login, register, loginAsGuest, logout, updateProfile, markNotificationRead, markAllNotificationsRead, addPoints, addNotification, addOrder, togglePostLike, toggleCommentLike, addComment, toast]);
+  const value = useMemo<AppState>(() => ({ user, isAuthenticated: !!authUser, isGuest, notifications, awards, certificates, orders, feed, login, register, loginAsGuest, logout, updateProfile, markNotificationRead, markAllNotificationsRead, addPoints, addNotification, addOrder, togglePostLike, toggleCommentLike, addComment, toast }), [user, authUser, isGuest, notifications, awards, certificates, orders, feed, login, register, loginAsGuest, logout, updateProfile, markNotificationRead, markAllNotificationsRead, addPoints, addNotification, addOrder, togglePostLike, toggleCommentLike, addComment, toast]);
 
   return (
     <AppContext.Provider value={value}>
