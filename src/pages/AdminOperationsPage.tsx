@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, Award, ShieldAlert, Settings2, Check, X, RefreshCw } from 'lucide-react';
+import { Activity, Award, ShieldAlert, Settings2, Check, X, RefreshCw, Truck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/Card';
@@ -29,36 +29,33 @@ export function AdminOperationsPage() {
 
   const updateCertificate = async (id: string, status: string) => {
     setBusy(id);
-    const { error } = await supabase.from('certificate_verifications').update({ status, revoked_at: status === 'REVOKED' ? new Date().toISOString() : null }).eq('id', id);
+    const { error } = await supabase.rpc('admin_set_certificate_status', { p_certificate_verification_id: id, p_to_status: status, p_reason: 'Admin operations' });
     setBusy(null);
     if (error) alert(error.message); else await load();
   };
-
   const resolveReport = async (id: string, status: 'RESOLVED'|'REJECTED') => {
     setBusy(id);
     const { error } = await supabase.from('comment_reports').update({ status, resolved_at: new Date().toISOString() }).eq('id', id);
     setBusy(null);
     if (error) alert(error.message); else await load();
   };
-
   const toggleFlag = async (flag: any) => {
     setBusy(flag.key);
     const { error } = await supabase.from('feature_flags').update({ enabled: !flag.enabled, updated_at: new Date().toISOString() }).eq('key', flag.key);
     setBusy(null);
     if (error) alert(error.message); else await load();
   };
-
   const tabs = [
     { key: 'certificates' as const, label: 'Sertifikat', icon: Award },
     { key: 'moderation' as const, label: 'Moderasi UGC', icon: ShieldAlert },
     { key: 'audit' as const, label: 'Audit Log', icon: Activity },
     { key: 'flags' as const, label: 'Feature Flags', icon: Settings2 },
   ];
-
   return <div className="min-h-screen bg-ink-950 text-slate-200 flex">
     <aside className="w-60 shrink-0 border-r border-white/5 p-3 sticky top-0 h-screen">
       <div className="px-3 py-3 mb-3"><p className="text-xs text-moss-400">SYKABELAJAR</p><h1 className="font-display font-bold text-xl text-white">Admin Operations</h1></div>
       {tabs.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => setTab(key)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm ${tab === key ? 'bg-moss-500/10 text-moss-300' : 'text-slate-400 hover:bg-white/5'}`}><Icon size={18}/>{label}</button>)}
+      <Link to="/admin/fulfillment" className="w-full flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-sm text-slate-400 hover:bg-white/5"><Truck size={18}/>Fulfillment</Link>
       <Link to="/admin" className="block mt-6 px-3 text-xs text-slate-500 hover:text-white">← Panel Admin</Link>
     </aside>
     <main className="flex-1 min-w-0 p-5 md:p-7 overflow-auto">
