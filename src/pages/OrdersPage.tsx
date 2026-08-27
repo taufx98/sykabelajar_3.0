@@ -1,66 +1,17 @@
 import { useEffect, useState } from 'react';
-import { ShoppingBag, Package, Plus, Minus, Loader2 } from 'lucide-react';
+import { ShoppingBag, Package, Plus, Minus, Loader2, Upload } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { formatRupiah, formatShortDate } from '@/lib/utils';
-import { createProductOrder, listActiveProducts, type CommerceProduct } from '@/services/commerce.service';
+import { createProductOrder, createProductOrderWithProof, listActiveProducts, type CommerceProduct } from '@/services/commerce.service';
+import { uploadImage } from '@/services/cloudinary.service';
 import { supabase } from '@/lib/supabase';
 
 export function OrdersPage() {
-  const [products, setProducts] = useState<CommerceProduct[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [selected, setSelected] = useState<CommerceProduct | null>(null);
-  const [quantity, setQuantity] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
-
-  const load = async () => {
-    setLoading(true); setError('');
-    try {
-      const [{ data: session }, catalog] = await Promise.all([supabase.auth.getSession(), listActiveProducts()]);
-      setProducts(catalog);
-      if (session.session?.user) {
-        const { data, error: orderError } = await supabase.from('orders').select('*, order_items(*)').eq('user_id', session.session.user.id).order('created_at', { ascending: false });
-        if (orderError) throw orderError;
-        setOrders(data ?? []);
-      } else setOrders([]);
-    } catch (e: any) { setError(e?.message ?? 'Gagal memuat shop dan pesanan.'); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { void load(); }, []);
-
-  const submitOrder = async () => {
-    if (!selected) return;
-    setSubmitting(true); setError(''); setMessage('');
-    try {
-      const order = await createProductOrder(selected.id, quantity);
-      setMessage(`Pesanan berhasil dibuat: ${String(order?.id ?? '').slice(0, 8)}`);
-      setSelected(null); setQuantity(1); await load();
-    } catch (e: any) { setError(e?.message ?? 'Pesanan gagal dibuat.'); }
-    finally { setSubmitting(false); }
-  };
-
-  return <div>
-    <div className="sticky top-0 z-20 glass border-b border-white/5 px-4 py-3">
-      <h2 className="font-display font-bold text-lg text-white">Shop & Pesanan</h2>
-      <p className="text-xs text-slate-500">Produk dan order tersimpan langsung di Supabase.</p>
-    </div>
-    <div className="p-4 space-y-6">
-      {error && <Card className="p-3 border-red-500/20 text-sm text-red-300">{error}</Card>}
-      {message && <Card className="p-3 border-moss-500/20 text-sm text-moss-300">{message}</Card>}
-      <section>
-        <div className="flex items-center justify-between mb-3"><div><p className="text-xs text-moss-400 font-semibold">SHOP</p><h3 className="font-display text-xl font-bold text-white">Produk Tersedia</h3></div>{loading && <Loader2 size={16} className="animate-spin text-slate-500"/>}</div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          {products.map((p)=><Card key={p.id} className="overflow-hidden">{p.image_url&&<img src={p.image_url} alt={p.name} className="w-full aspect-[16/8] object-cover"/>}<div className="p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-sm font-semibold text-white">{p.name}</p><p className="text-xs text-slate-500 mt-1">{p.short_description||p.product_type}</p></div><Badge>{p.product_type}</Badge></div><p className="text-lg font-bold text-moss-300 mt-3">{formatRupiah(p.price)}</p><Button size="sm" className="mt-3" onClick={()=>{setSelected(p);setQuantity(1)}}>Pesan</Button></div></Card>)}
-          {!loading&&!products.length&&<Card className="p-8 text-center col-span-full text-sm text-slate-500">Belum ada produk aktif di backend.</Card>}
-        </div>
-      </section>
-      <section><div className="flex items-center gap-2 mb-3"><ShoppingBag size={17} className="text-moss-400"/><h3 className="font-display text-xl font-bold text-white">Pesanan Saya</h3></div><div className="space-y-2">{orders.map(o=><Card key={o.id} className="p-4"><div className="flex items-center gap-3"><Package size={18} className="text-moss-400"/><div className="flex-1"><p className="text-sm text-white">Order {String(o.id).slice(0,8)}</p><p className="text-xs text-slate-500">{formatShortDate(o.created_at)} · {o.order_items?.length??0} item</p></div><b className="text-white">{formatRupiah(Number(o.total||0))}</b><Badge>{String(o.status)}</Badge></div></Card>)}{!loading&&!orders.length&&<Card className="p-6 text-center text-sm text-slate-500">Belum ada pesanan.</Card>}</div></section>
-    </div>
-    {selected&&<div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"><Card className="w-full max-w-md p-5"><h3 className="font-display text-lg font-bold text-white">Buat Pesanan</h3><p className="text-sm text-slate-400 mt-1">{selected.name}</p><div className="flex items-center justify-between mt-5"><span className="text-sm text-slate-400">Jumlah</span><div className="flex items-center gap-3"><button className="w-8 h-8 rounded-lg bg-ink-800 text-white" onClick={()=>setQuantity(q=>Math.max(1,q-1))}><Minus size={14} className="mx-auto"/></button><span className="w-6 text-center text-white">{quantity}</span><button className="w-8 h-8 rounded-lg bg-ink-800 text-white" onClick={()=>setQuantity(q=>q+1)}><Plus size={14} className="mx-auto"/></button></div></div><div className="flex items-center justify-between mt-5 pt-4 border-t border-white/5"><span className="text-sm text-slate-400">Subtotal</span><span className="text-lg font-bold text-white">{formatRupiah(selected.price*quantity)}</span></div><div className="flex gap-2 mt-5"><Button variant="outline" fullWidth onClick={()=>setSelected(null)}>Batal</Button><Button fullWidth loading={submitting} onClick={()=>void submitOrder()}>Buat Pesanan</Button></div></Card></div>}
-  </div>;
+  const [products,setProducts]=useState<CommerceProduct[]>([]); const [orders,setOrders]=useState<any[]>([]); const [selected,setSelected]=useState<CommerceProduct|null>(null); const [quantity,setQuantity]=useState(1); const [loading,setLoading]=useState(true); const [submitting,setSubmitting]=useState(false); const [error,setError]=useState(''); const [message,setMessage]=useState(''); const [whatsapp,setWhatsapp]=useState(''); const [paymentMethod,setPaymentMethod]=useState('BANK_TRANSFER'); const [proof,setProof]=useState<{url:string;publicId?:string;width?:number;height?:number;version?:number;resourceType?:string}|null>(null); const [uploading,setUploading]=useState(false);
+  const load=async()=>{setLoading(true);try{const [{data:session},catalog]=await Promise.all([supabase.auth.getSession(),listActiveProducts()]);setProducts(catalog);if(session.session?.user){const {data,error}=await supabase.from('orders').select('*,order_items(*)').eq('user_id',session.session.user.id).order('created_at',{ascending:false});if(error)throw error;setOrders(data??[]);}else setOrders([]);}catch(e:any){setError(e?.message||'Gagal memuat shop dan pesanan.');}finally{setLoading(false);}}; useEffect(()=>{void load();},[]);
+  const onProof=async(e:React.ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];if(!file)return;setUploading(true);try{const r=await uploadImage(file,'sykabelajar/payment-proofs');setProof({url:r.secure_url,publicId:r.public_id,width:r.width,height:r.height,version:r.version,resourceType:r.resource_type});}catch(e:any){setError(e?.message||'Upload bukti gagal.');}finally{setUploading(false);e.target.value='';}};
+  const submit=async()=>{if(!selected)return;setSubmitting(true);setError('');setMessage('');try{if(proof){if(!whatsapp.trim())throw new Error('Nomor WhatsApp wajib diisi.');const order=await createProductOrderWithProof({productId:selected.id,quantity,whatsapp,paymentMethod,proofUrl:proof.url,proofPublicId:proof.publicId,proofWidth:proof.width,proofHeight:proof.height,proofVersion:proof.version?.toString(),proofResourceType:proof.resourceType});setMessage(`Pesanan dan bukti pembayaran tersimpan: ${String(order?.id||'').slice(0,8)}`);}else{const order=await createProductOrder(selected.id,quantity);setMessage(`Pesanan dibuat. Silakan kirim bukti pembayaran untuk diproses: ${String(order?.id||'').slice(0,8)}`);}setSelected(null);setQuantity(1);setProof(null);setWhatsapp('');await load();}catch(e:any){setError(e?.message||'Pesanan gagal.');}finally{setSubmitting(false);}};
+  return <div><div className="sticky top-0 z-20 glass border-b border-white/5 px-4 py-3"><h2 className="font-display font-bold text-lg text-white">Shop & Pesanan</h2><p className="text-xs text-slate-500">Produk, order, dan bukti pembayaran tersimpan di backend.</p></div><div className="p-4 space-y-6">{error&&<Card className="p-3 border-red-500/20 text-sm text-red-300">{error}</Card>}{message&&<Card className="p-3 border-moss-500/20 text-sm text-moss-300">{message}</Card>}<section><div className="flex items-center justify-between mb-3"><div><p className="text-xs text-moss-400 font-semibold">SHOP</p><h3 className="font-display text-xl font-bold text-white">Produk Tersedia</h3></div>{loading&&<Loader2 size={16} className="animate-spin text-slate-500"/>}</div><div className="grid sm:grid-cols-2 gap-3">{products.map(p=><Card key={p.id} className="overflow-hidden">{p.image_url&&<img src={p.image_url} alt={p.name} className="w-full aspect-[16/8] object-cover"/>}<div className="p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-sm font-semibold text-white">{p.name}</p><p className="text-xs text-slate-500 mt-1">{p.short_description||p.product_type}</p></div><Badge>{p.product_type}</Badge></div><p className="text-lg font-bold text-moss-300 mt-3">{formatRupiah(p.price)}</p><Button size="sm" className="mt-3" onClick={()=>{setSelected(p);setQuantity(1);setProof(null);}}>Pesan</Button></div></Card>)}{!loading&&!products.length&&<Card className="p-8 text-center col-span-full text-sm text-slate-500">Belum ada produk aktif di backend.</Card>}</div></section><section><div className="flex items-center gap-2 mb-3"><ShoppingBag size={17} className="text-moss-400"/><h3 className="font-display text-xl font-bold text-white">Pesanan Saya</h3></div><div className="space-y-2">{orders.map(o=><Card key={o.id} className="p-4"><div className="flex items-center gap-3"><Package size={18} className="text-moss-400"/><div className="flex-1"><p className="text-sm text-white">Order {String(o.id).slice(0,8)}</p><p className="text-xs text-slate-500">{formatShortDate(o.created_at)} · {o.order_items?.length??0} item</p></div><b className="text-white">{formatRupiah(Number(o.total||0))}</b><Badge>{String(o.status)}</Badge></div></Card>)}{!loading&&!orders.length&&<Card className="p-6 text-center text-sm text-slate-500">Belum ada pesanan.</Card>}</div></section></div>{selected&&<div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"><Card className="w-full max-w-md p-5 max-h-[90vh] overflow-auto"><h3 className="font-display text-lg font-bold text-white">Buat Pesanan</h3><p className="text-sm text-slate-400 mt-1">{selected.name}</p><div className="flex items-center justify-between mt-5"><span className="text-sm text-slate-400">Jumlah</span><div className="flex items-center gap-3"><button className="w-8 h-8 rounded-lg bg-ink-800 text-white" onClick={()=>setQuantity(q=>Math.max(1,q-1))}><Minus size={14} className="mx-auto"/></button><span className="w-6 text-center text-white">{quantity}</span><button className="w-8 h-8 rounded-lg bg-ink-800 text-white" onClick={()=>setQuantity(q=>q+1)}><Plus size={14} className="mx-auto"/></button></div></div><input className="input mt-4" placeholder="Nomor WhatsApp" value={whatsapp} onChange={e=>setWhatsapp(e.target.value)}/><select className="input mt-3" value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)}><option value="BANK_TRANSFER">Transfer Bank</option><option value="QRIS">QRIS</option><option value="EWALLET">E-Wallet</option></select><label className="mt-3 block"><span className="label">Bukti pembayaran (opsional, bisa dikirim setelah order)</span><span className="mt-2 flex items-center gap-2 input cursor-pointer"><Upload size={15}/>{uploading?'Mengunggah…':proof?'Bukti siap dikirim':'Pilih gambar'}<input type="file" accept="image/*" className="hidden" onChange={onProof}/></span></label><div className="flex items-center justify-between mt-5 pt-4 border-t border-white/5"><span className="text-sm text-slate-400">Subtotal</span><span className="text-lg font-bold text-white">{formatRupiah(selected.price*quantity)}</span></div><div className="flex gap-2 mt-5"><Button variant="outline" fullWidth onClick={()=>setSelected(null)}>Batal</Button><Button fullWidth loading={submitting} onClick={()=>void submit()}>Buat Pesanan</Button></div></Card></div>}</div>;
 }
